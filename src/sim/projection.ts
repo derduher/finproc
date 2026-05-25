@@ -55,6 +55,13 @@ export function runSingleProjection(
   const maxAge = person.maxAge
   const years = maxAge - startAge
 
+  // "Effective retirement age" — the year at which salary income stops.
+  // Proxy: the latest contributionEndAge across all accounts. If no accounts,
+  // assume the person retires at the start of the simulation (no salary).
+  const effectiveRetirementAge = simAccounts.length > 0
+    ? Math.max(...simAccounts.map((a) => a.contributionEndAge))
+    : startAge
+
   const yearlyResults: YearEndState[] = []
   let succeeded = true
   let depleteAge: number | undefined = undefined
@@ -127,7 +134,25 @@ export function runSingleProjection(
         }
       }
 
-      const netNeed = Math.max(0, inflatedExpenses + oneTimeTotal - ssIncome)
+      // Disposable income from salary during working years.
+      // The user's salary covers expenses while they're still employed
+      // (proxy: until the latest contributionEndAge across all accounts).
+      // We subtract:
+      //   - Income tax (approximated by the flat marginal rate)
+      //   - Account contributions (already deducted from salary by `contribute()`)
+      // Simplification: traditional contributions aren't separately tax-deferred —
+      // they're treated as if paid from after-tax income (slightly conservative).
+      let disposableIncome = 0
+      if (yearStartAge < effectiveRetirementAge) {
+        const afterTaxSalary = annualSalary * (1 - person.marginalTaxRate)
+        let yearContributions = 0
+        for (const acc of simAccounts) {
+          yearContributions += acc.annualContribution(yearStartAge, annualSalary)
+        }
+        disposableIncome = Math.max(0, afterTaxSalary - yearContributions)
+      }
+
+      const netNeed = Math.max(0, inflatedExpenses + oneTimeTotal - ssIncome - disposableIncome)
 
       if (netNeed > 0) {
         const shortfall = makeWithdrawals(
@@ -156,18 +181,32 @@ export function runSingleProjection(
 
         // Use a small threshold to avoid false positives from floating-point
         // rounding in the gross-up round-trip (e.g. net/rate*rate ≠ net exactly).
-        if (shortfall > 0.01) {
+        //
+        // Real depletion requires that there's an actual unmet need AND no
+        // available portfolio to cover it. We treat a shortfall as depletion
+        // only when the total portfolio is below the unmet need — otherwise
+        // it's a temporary lockout (e.g. money exists but withdrawalStartAge
+        // hasn't been reached) and the simulation continues.
+        const totalAvailable = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
+        if (shortfall > 0.01 && totalAvailable < shortfall - 0.01) {
           depleted = true
           depleteAge = yearEndAge
           succeeded = false
+          // Spec §3.3: portfolio remains at zero for the remainder of the projection.
+          for (const acc of simAccounts) {
+            acc.zero()
+          }
         }
       }
     }
 
-    const totalBalance = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
+    // Per spec §3.3: once depleted, balances stay at zero.
+    const totalBalance = depleted
+      ? 0
+      : simAccounts.reduce((s, a) => s + a.getBalance(), 0)
     const accountBalances: Record<string, number> = {}
     for (const acc of simAccounts) {
-      accountBalances[acc.id] = acc.getBalance()
+      accountBalances[acc.id] = depleted ? 0 : acc.getBalance()
     }
 
     yearlyResults.push({ age: yearEndAge, totalBalance, accountBalances })

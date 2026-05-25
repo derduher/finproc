@@ -52,8 +52,11 @@ URL (?s=…)
 
 ### Simulation internals
 
-- **`SimAccount`** tracks `balance` and `costBasis` separately. Contributions are gated by `contributionEndAge`; withdrawals by `withdrawalStartAge`. RMDs apply at age 73+ using IRS Uniform Lifetime divisors.
-- **`runSingleProjection`** loops month-by-month. Depletion is flagged when shortfall > $0.01 (the $0.01 threshold avoids float epsilon false positives from tax gross-up round-trips).
+- **`SimAccount`** tracks `balance` and `costBasis` separately. Contributions are gated by `contributionEndAge`; withdrawals by `withdrawalStartAge`. RMDs apply at age 73+ using IRS Uniform Lifetime divisors. `zero()` is called when the projection flags depletion.
+- **`runSingleProjection`** loops month-by-month.
+  - **Pre-retirement salary covers expenses**: while `currentAge < max(contributionEndAge)`, the simulation subtracts `salary × (1 - marginalRate) - contributions` from `netNeed`. Without this, a working person with locked retirement accounts would be falsely flagged depleted on day one.
+  - **Depletion criterion**: depletion only fires when there's an actual unmet need *and* the total portfolio balance can't cover it. A withdrawal lockout (e.g. all accounts have `withdrawalStartAge > currentAge`) is treated as a silent shortfall, not depletion. Once depletion is flagged, all accounts are zeroed for the remainder of the projection (per spec §3.3) — `totalBalance` reads as 0 in every subsequent yearly result.
+  - **Float epsilon**: depletion uses `shortfall > 0.01` and `totalAvailable < shortfall - 0.01` to avoid false positives from tax gross-up round-trips.
 - **`runMonteCarlo`** uses `mulberry32(seed)` PRNG; draws rates once per breakpoint segment per run via Box-Muller. Breakpoint segments consume RNG draws for determinism even when not fully implemented per-year.
 - **Withdrawal strategies**: `TaxOptimal` (taxable → traditional → Roth), `Proportional`, `UserDefined`.
 
@@ -63,7 +66,6 @@ URL (?s=…)
 - **No Recharts** — all charts (`HiFanChart`, `HiTornado`) are hand-rolled SVG React components in `src/ui/charts/`.
 - **Coverage threshold**: 90% stmt/func/line, 89% branch — measured only for `src/{math,schema,sim,storage,hooks,store.ts}`. UI components are excluded.
 - **`simulate` in tests**: `src/worker/simulator.ts` exports `simulate` as a plain async function. Tests mock it with `vi.mock('../worker/simulator')` — no actual Worker is spawned.
-- **Float epsilon**: never compare withdrawal shortfall with `> 0`; use `> 0.01`.
 
 ## Original specification
 

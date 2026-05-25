@@ -226,6 +226,86 @@ describe('runSingleProjection — one-time expenses', () => {
   })
 })
 
+describe('runSingleProjection — pre-retirement salary covers expenses', () => {
+  it('working person with adequate salary does NOT deplete from locked accounts', () => {
+    // 32yo, $95K salary, $70K expenses, $800K Roth locked until 59.
+    // Disposable income ≈ $95K × 0.76 = $72.2K (minus contributions).
+    // Expenses $70K are fully covered by salary — no portfolio withdrawal needed.
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 32, maxAge: 70, annualSalary: 95000, marginalTaxRate: 0.24 },
+        accounts: [{
+          id: 'a', name: 'Roth', type: 'roth',
+          balance: 800000,
+          contributionAmount: 0, // no contributions, so all salary is disposable
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 62,
+          withdrawalStartAge: 59,
+        }],
+        annualExpenses: 70000,
+      }),
+      { stockGrowth: 0.07, inflation: 0.03 },
+    )
+    // Should NOT be flagged as depleted (the old bug would mark it failed at age 32)
+    expect(result.succeeded).toBe(true)
+    expect(result.depleteAge).toBeUndefined()
+    expect(result.yearlyResults.at(-1)!.totalBalance).toBeGreaterThan(800000) // grew
+  })
+
+  it('salary stops applying after effective retirement age', () => {
+    // contributionEndAge = 45 means effective retirement = 45.
+    // From 45 onward, salary is gone and the small Roth must cover huge expenses → deplete.
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 32, maxAge: 70, annualSalary: 95000, marginalTaxRate: 0.24 },
+        accounts: [{
+          id: 'a', name: 'Roth', type: 'roth',
+          balance: 50000, // tiny
+          contributionAmount: 0,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 45,
+          withdrawalStartAge: 45,
+        }],
+        annualExpenses: 100000, // expensive
+      }),
+      { stockGrowth: 0.03, inflation: 0.03 },
+    )
+    expect(result.succeeded).toBe(false)
+    expect(result.depleteAge).toBeDefined()
+    expect(result.depleteAge!).toBeGreaterThanOrEqual(45) // after retirement, not before
+  })
+})
+
+describe('runSingleProjection — post-depletion balance behaviour', () => {
+  it('after depletion, balances stay at zero through MAX_AGE (spec §3.3)', () => {
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 65, maxAge: 90, annualSalary: 0, marginalTaxRate: 0.24 },
+        accounts: [{
+          id: 'a', name: 'Trad', type: 'traditional',
+          balance: 50000, // very small, will deplete fast
+          contributionAmount: 0,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 64,
+          withdrawalStartAge: 65,
+        }],
+        annualExpenses: 80000, // way more than balance
+      }),
+      { stockGrowth: 0.07, inflation: 0 },
+    )
+    expect(result.succeeded).toBe(false)
+    expect(result.depleteAge).toBeDefined()
+    // Every year after depletion should have totalBalance === 0 (not still growing)
+    const depleteIdx = result.yearlyResults.findIndex((r) => r.age >= result.depleteAge!)
+    for (let i = depleteIdx; i < result.yearlyResults.length; i++) {
+      expect(result.yearlyResults[i].totalBalance).toBe(0)
+    }
+  })
+})
+
 describe('runSingleProjection — breakpoints', () => {
   it('breakpoint at age 65 changes growth rate for subsequent months', () => {
     const highGrowth = runSingleProjection(

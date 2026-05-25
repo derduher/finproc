@@ -124,6 +124,29 @@ export class SimAccount {
 
   // ─── Private helpers ────────────────────────────────────────────────────────
 
+  /** Force the account balance to zero (used when portfolio depletion is flagged). */
+  zero(): void {
+    this.balance = 0
+    this.costBasis = 0
+  }
+
+  /** What's the type of this account? Used by projection.ts to check contribution gating. */
+  get contributionEndAge(): number {
+    return this.def.contributionEndAge
+  }
+
+  /**
+   * Total amount that would be contributed (employee + employer match) in a single
+   * year at the given salary, if the account is still in contribution phase.
+   * Mirrors the per-month logic in `contribute()`; used by `runSingleProjection`
+   * to subtract pre-retirement contributions from disposable income.
+   */
+  annualContribution(currentAge: number, annualSalary: number): number {
+    if (currentAge > this.def.contributionEndAge) return 0
+    const monthly = this.monthlyContributionAmount(annualSalary) + this.monthlyMatchAmount(annualSalary)
+    return monthly * 12
+  }
+
   private monthlyContributionAmount(annualSalary: number): number {
     const { contributionAmount, contributionType, contributionFrequency } = this.def
     const multiplier = FREQ_MULTIPLIER[contributionFrequency]
