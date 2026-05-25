@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import './styles.css';
+
+/* Global resets */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--t-body);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Spin animation for Spinner component */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

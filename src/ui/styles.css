@@ -1,0 +1,255 @@
+/* Hi-fi component styles. Token-driven; works for all aesthetics. */
+
+.hf {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--t-body);
+  font-feature-settings: "ss01", "cv11", "tnum";
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+.hf, .hf * { box-sizing: border-box; }
+
+.hf h1, .hf h2, .hf h3, .hf .display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  margin: 0;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.hf .display { font-size: var(--t-display); line-height: 0.95; font-weight: 500; }
+.hf h1 { font-size: var(--t-h1); line-height: 1.1; }
+.hf h2 { font-size: var(--t-h2); line-height: 1.2; }
+.hf h3 { font-size: var(--t-h3); line-height: 1.25; }
+
+.hf .num { font-family: var(--font-mono); font-feature-settings: "tnum", "zero"; letter-spacing: -0.01em; }
+.hf .label {
+  font-family: var(--font-body);
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.hf .muted { color: var(--ink-3); }
+.hf .micro { font-size: var(--t-micro); color: var(--ink-3); }
+
+/* Card / surface */
+.hf .card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-3);
+  padding: var(--space-5);
+  position: relative;
+}
+.hf .card-flush { padding: 0; }
+.hf .card-sunk { background: var(--bg-sunk); border-color: transparent; }
+.hf .divider { height: 1px; background: var(--line); margin: var(--space-4) 0; }
+.hf .v-divider { width: 1px; background: var(--line); align-self: stretch; }
+
+/* Buttons */
+.hf .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-2);
+  font-family: var(--font-body);
+  font-size: var(--t-body);
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  letter-spacing: -0.005em;
+}
+.hf .btn:hover { background: var(--bg-sunk); }
+.hf .btn-primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+.hf .btn-primary:hover { background: var(--ink-2); }
+.hf .btn-accent {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.hf .btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-2);
+}
+.hf .btn-ghost:hover { background: var(--bg-sunk); color: var(--ink); }
+.hf .btn-sm { height: 28px; padding: 0 10px; font-size: var(--t-sm); border-radius: var(--radius-1); }
+.hf .btn-icon { width: 32px; padding: 0; justify-content: center; }
+
+/* Chips */
+.hf .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--t-sm);
+  background: var(--bg-sunk);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.hf .chip-active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.hf .chip-accent {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.hf .chip-good { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.hf .chip-bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+
+/* Field */
+.hf .field {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2);
+  font: inherit;
+  color: var(--ink);
+  min-width: 64px;
+}
+.hf .field-num { font-family: var(--font-mono); font-feature-settings: "tnum"; }
+.hf .field-row { display: flex; align-items: center; gap: 8px; }
+
+/* Segmented */
+.hf .seg {
+  display: inline-flex;
+  background: var(--bg-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2);
+  padding: 2px;
+}
+.hf .seg > * {
+  padding: 4px 10px;
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.hf .seg > .on { background: var(--bg-elev); color: var(--ink); box-shadow: var(--shadow-sm); }
+
+/* Progress dots */
+.hf .step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+}
+.hf .step .dot {
+  width: 22px; height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  background: var(--bg-elev);
+}
+.hf .step.done .dot { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.hf .step.active .dot { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.hf .step.active { color: var(--ink); font-weight: 500; }
+.hf .step.done { color: var(--ink-2); }
+
+/* Tag / pill / status badges */
+.hf .badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 22px; padding: 0 8px; border-radius: var(--radius-pill);
+  font-size: var(--t-micro); font-weight: 500;
+  background: var(--bg-sunk); color: var(--ink-2); border: 1px solid var(--line);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.hf .badge-good { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.hf .badge-bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.hf .badge-accent { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+
+/* Metric tile */
+.hf .metric { display: flex; flex-direction: column; gap: 4px; }
+.hf .metric .value { font-family: var(--font-display); font-size: 30px; line-height: 1; letter-spacing: -0.02em; }
+.hf .metric .value-mono { font-family: var(--font-mono); font-feature-settings: "tnum"; font-size: 28px; }
+.hf .metric .sub { font-size: var(--t-sm); color: var(--ink-3); }
+
+/* Sidebar nav (wizard) */
+.hf .nav-step {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--radius-2);
+  color: var(--ink-3);
+  font-size: var(--t-body);
+  cursor: pointer;
+}
+.hf .nav-step.active { background: var(--bg-sunk); color: var(--ink); font-weight: 500; }
+.hf .nav-step.done { color: var(--ink-2); }
+.hf .nav-step .idx {
+  width: 22px; height: 22px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 11px;
+  border: 1px solid var(--line-strong); color: var(--ink-3);
+  background: var(--bg-elev);
+}
+.hf .nav-step.done .idx { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.hf .nav-step.active .idx { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+/* Annotation pill (engineering note on hi-fi screens) */
+.hf .annot {
+  position: absolute;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  font-size: var(--t-sm);
+  padding: 8px 10px;
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-md);
+  z-index: 8;
+  max-width: 240px;
+  line-height: 1.35;
+}
+
+/* Animations for "still" hi-fi animated flow */
+@keyframes flowDash {
+  to { stroke-dashoffset: -40; }
+}
+@keyframes flowGlow {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.flow-dash { stroke-dasharray: 6 6; animation: flowDash 1.6s linear infinite; }
+.flow-pulse { animation: flowGlow 2.2s ease-in-out infinite; }
+
+/* shimmer for loading */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.hf .skel {
+  background: linear-gradient(90deg, var(--bg-sunk) 0%, var(--line) 50%, var(--bg-sunk) 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.6s linear infinite;
+  border-radius: var(--radius-1);
+}
+
+/* Hide scrollbars on artboards */
+.hf::-webkit-scrollbar { display: none; }
+.hf { scrollbar-width: none; }

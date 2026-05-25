@@ -1,0 +1,206 @@
+/* Hi-fi design tokens.
+   Three aesthetic directions (warm/cool/mono) × two themes (light/dark)
+   are all variables-driven. Pick by setting data-aesthetic + data-theme. */
+
+:root {
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
+  --space-10: 72px;
+
+  --radius-1: 4px;
+  --radius-2: 8px;
+  --radius-3: 12px;
+  --radius-4: 16px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 1px 2px rgba(0,0,0,0.04), 0 4px 14px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 8px rgba(0,0,0,0.04), 0 16px 48px rgba(0,0,0,0.10);
+
+  --font-display: "Newsreader", Georgia, serif;
+  --font-body: "Geist", "Helvetica Neue", sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+
+  /* Type scale (display sizes vary slightly by aesthetic) */
+  --t-display: clamp(40px, 5vw, 64px);
+  --t-h1: 32px;
+  --t-h2: 22px;
+  --t-h3: 17px;
+  --t-body: 14px;
+  --t-sm: 13px;
+  --t-xs: 12px;
+  --t-micro: 11px;
+
+  /* Density (changeable via Tweaks) */
+  --density: 1;
+}
+
+/* ───── WARM EDITORIAL ────────────────────────────────────────────── */
+[data-aesthetic="warm"] {
+  --bg: #faf7f1;
+  --bg-elev: #ffffff;
+  --bg-sunk: #f3efe6;
+  --line: #e5dccb;
+  --line-strong: #cdc1ab;
+  --ink: #1c1814;
+  --ink-2: #4a4239;
+  --ink-3: #7c7060;
+  --ink-4: #a8997f;
+
+  --accent: #b8753a;          /* warm ochre */
+  --accent-soft: #efd9b7;
+  --accent-ink: #6a3f17;
+
+  --good: #506c3c;            /* moss */
+  --good-soft: #d8e2c8;
+  --bad: #9c3a30;             /* terra */
+  --bad-soft: #efd1cd;
+
+  --chart-band: rgba(184, 117, 58, 0.18);
+  --chart-line: #1c1814;
+  --chart-grid: #ece4d4;
+  --chart-axis: #b3a48a;
+}
+
+[data-aesthetic="warm"][data-theme="dark"] {
+  --bg: #14110d;
+  --bg-elev: #1d1812;
+  --bg-sunk: #100d09;
+  --line: #312920;
+  --line-strong: #4a3f33;
+  --ink: #f6f1e6;
+  --ink-2: #c8bda9;
+  --ink-3: #948870;
+  --ink-4: #5d5443;
+
+  --accent: #d6964e;
+  --accent-soft: #45301a;
+  --accent-ink: #f0c182;
+
+  --good: #95b478;
+  --good-soft: #2a3520;
+  --bad: #d96b5e;
+  --bad-soft: #3d211d;
+
+  --chart-band: rgba(214, 150, 78, 0.22);
+  --chart-line: #f6f1e6;
+  --chart-grid: #2b2218;
+  --chart-axis: #4a4032;
+}
+
+/* ───── COOL TRUST ───────────────────────────────────────────────── */
+[data-aesthetic="cool"] {
+  --bg: #f6f8fb;
+  --bg-elev: #ffffff;
+  --bg-sunk: #eef1f6;
+  --line: #dee3eb;
+  --line-strong: #c2cad8;
+  --ink: #0e1726;
+  --ink-2: #3a4659;
+  --ink-3: #6c7689;
+  --ink-4: #9aa3b4;
+
+  --accent: #2050e0;          /* cobalt */
+  --accent-soft: #d8e1fb;
+  --accent-ink: #143094;
+
+  --good: #15803d;
+  --good-soft: #d5ead8;
+  --bad: #b91c1c;
+  --bad-soft: #f3d5d5;
+
+  --chart-band: rgba(32, 80, 224, 0.14);
+  --chart-line: #0e1726;
+  --chart-grid: #e7ebf2;
+  --chart-axis: #aab3c3;
+}
+
+/* ───── MONO QUANT ───────────────────────────────────────────────── */
+[data-aesthetic="mono"] {
+  --bg: #ffffff;
+  --bg-elev: #ffffff;
+  --bg-sunk: #f4f4f2;
+  --line: #e2e2dd;
+  --line-strong: #c2c2bb;
+  --ink: #0d0d0a;
+  --ink-2: #36352f;
+  --ink-3: #6e6c63;
+  --ink-4: #9d9b91;
+
+  --accent: #1f7a3b;          /* terminal green */
+  --accent-soft: #d8eada;
+  --accent-ink: #0e3d1b;
+
+  --good: #1f7a3b;
+  --good-soft: #d8eada;
+  --bad: #8a3a14;
+  --bad-soft: #ebd4c4;
+
+  --chart-band: rgba(31, 122, 59, 0.16);
+  --chart-line: #0d0d0a;
+  --chart-grid: #ededea;
+  --chart-axis: #b0aea4;
+
+  --font-body: "Geist Mono", ui-monospace, monospace;
+  --font-display: "Geist Mono", ui-monospace, monospace;
+}
+
+[data-aesthetic="mono"][data-theme="dark"] {
+  --bg: #0c0d0a;
+  --bg-elev: #131410;
+  --bg-sunk: #0a0b08;
+  --line: #25271f;
+  --line-strong: #3a3d2f;
+  --ink: #f5f4ec;
+  --ink-2: #c6c5b8;
+  --ink-3: #8c8b7d;
+  --ink-4: #565649;
+
+  --accent: #5cc879;
+  --accent-soft: #18301f;
+  --accent-ink: #b6e6c3;
+
+  --good: #5cc879;
+  --good-soft: #18301f;
+  --bad: #d28557;
+  --bad-soft: #2f1f12;
+
+  --chart-band: rgba(92, 200, 121, 0.16);
+  --chart-line: #f5f4ec;
+  --chart-grid: #1a1c15;
+  --chart-axis: #3a3d2f;
+}
+
+[data-aesthetic="cool"][data-theme="dark"] {
+  --bg: #0b1018;
+  --bg-elev: #131a26;
+  --bg-sunk: #080c12;
+  --line: #1f283a;
+  --line-strong: #2f3b50;
+  --ink: #eaeef6;
+  --ink-2: #b6bfd0;
+  --ink-3: #7d889c;
+  --ink-4: #4d5466;
+
+  --accent: #6c8df2;
+  --accent-soft: #1a2440;
+  --accent-ink: #b8c5f6;
+
+  --good: #5fc983;
+  --good-soft: #1a2e22;
+  --bad: #f08079;
+  --bad-soft: #3a1f1d;
+
+  --chart-band: rgba(108, 141, 242, 0.20);
+  --chart-line: #eaeef6;
+  --chart-grid: #1a2030;
+  --chart-axis: #3a4054;
+}
