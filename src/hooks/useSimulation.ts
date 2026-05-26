@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MonteCarloResult } from '../sim/montecarlo'
+import type { MonteCarloResult, ProgressEvent } from '../sim/montecarlo'
 import type { SimulationInputs } from '../schema'
 import { simulate } from '../worker/simulator'
 import { getCache, setCache } from '../storage/cache'
@@ -9,6 +9,8 @@ export interface SimulationState {
   loading: boolean
   stale: boolean
   error: Error | null
+  /** Latest progress event from the worker; undefined when no run is active. */
+  progress: ProgressEvent | undefined
 }
 
 /**
@@ -26,6 +28,7 @@ export function useSimulation(inputs: SimulationInputs | null): SimulationState 
   const [loading, setLoading] = useState(false)
   const [stale, setStale] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [progress, setProgress] = useState<ProgressEvent | undefined>(undefined)
 
   // Track whether the effect's cleanup has run (cancellation)
   const cancelledRef = useRef(false)
@@ -34,6 +37,7 @@ export function useSimulation(inputs: SimulationInputs | null): SimulationState 
     if (!inputs) {
       setLoading(false)
       setStale(false)
+      setProgress(undefined)
       return
     }
 
@@ -43,6 +47,7 @@ export function useSimulation(inputs: SimulationInputs | null): SimulationState 
     // a "stale" overlay on the previous chart while recomputing.
     setStale(true)
     setError(null)
+    setProgress(undefined)
 
     let didCancel = false
 
@@ -65,7 +70,10 @@ export function useSimulation(inputs: SimulationInputs | null): SimulationState 
       if (!didCancel) setLoading(true)
 
       try {
-        const res = await simulate(inputs!)
+        const res = await simulate(inputs!, 1000, (p) => {
+          if (didCancel) return
+          setProgress(p)
+        })
         if (didCancel) return
         // 3. Store in cache async (fire-and-forget; don't block UI)
         setCache(inputs!, res).catch(() => {})
@@ -88,5 +96,5 @@ export function useSimulation(inputs: SimulationInputs | null): SimulationState 
     }
   }, [inputs])
 
-  return { result, loading, stale, error }
+  return { result, loading, stale, error, progress }
 }

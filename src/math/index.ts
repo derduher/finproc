@@ -18,6 +18,47 @@ export function inflate(amount: number, fromAge: number, toAge: number, rate: nu
   return amount * Math.pow(1 + rate, toAge - fromAge)
 }
 
+/**
+ * Cumulative deflator — for converting nominal future dollars back to today's
+ * dollars. Returns an array indexed by `age - currentAge`, length
+ * `maxAge - currentAge + 1`. Each element is 1 / cumulativeInflation through
+ * that age, using the midpoint inflation `(min + max) / 2` of the active
+ * segment for each year.
+ *
+ * Used by the nominal/real display toggle in ResultsStep / charts.
+ */
+export interface DeflatorSegment {
+  startAge: number
+  inflationMin: number
+  inflationMax: number
+}
+export function cumulativeDeflator(args: {
+  currentAge: number
+  maxAge: number
+  segments: DeflatorSegment[]
+}): number[] {
+  const { currentAge, maxAge, segments } = args
+  // Sort defensively in case caller passes unsorted.
+  const sorted = [...segments].sort((a, b) => a.startAge - b.startAge)
+  const out: number[] = new Array(maxAge - currentAge + 1)
+  out[0] = 1
+  let cumulative = 1
+  for (let age = currentAge + 1; age <= maxAge; age++) {
+    // The inflation that applies for the year ending at `age` is the segment
+    // whose startAge ≤ age — i.e., a breakpoint at startAge=35 takes effect
+    // immediately for the year ending at age 35.
+    let activeSeg = sorted[0]
+    for (const s of sorted) {
+      if (s.startAge <= age) activeSeg = s
+      else break
+    }
+    const midpointInflation = (activeSeg.inflationMin + activeSeg.inflationMax) / 2
+    cumulative *= 1 + midpointInflation
+    out[age - currentAge] = 1 / cumulative
+  }
+  return out
+}
+
 // ─── PRNG — mulberry32 ────────────────────────────────────────────────────────
 
 /**

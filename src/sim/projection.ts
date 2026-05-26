@@ -20,6 +20,12 @@ export interface YearEndState {
   age: number
   totalBalance: number
   accountBalances: Record<string, number>
+  /** Total contributions + employer match credited this year (nominal $) */
+  contributions: number
+  /** Social Security income received this year (nominal $) */
+  socialSecurity: number
+  /** Gross withdrawals from accounts this year (nominal $) */
+  withdrawals: number
 }
 
 export interface ProjectionResult {
@@ -32,11 +38,18 @@ export interface ProjectionResult {
 /**
  * Run a single deterministic projection with pre-sampled growth/inflation rates.
  * The `rates` object holds the rates for the INITIAL segment.
+ *
+ * If `breakpointRates` is provided, index k supplies the rates for the k-th
+ * entry in `inputs.breakpoints` (each one takes effect from `startAge` onward,
+ * superseding earlier segments). When omitted, the initial `rates` apply for
+ * the entire projection — preserving the pre-segment-aware call shape.
+ *
  * For Monte Carlo: call this 1,000 times with different sampled rates.
  */
 export function runSingleProjection(
   inputs: SimulationInputs,
   rates: SampledRates,
+  breakpointRates?: SampledRates[],
 ): ProjectionResult {
   const {
     person,
@@ -71,16 +84,19 @@ export function runSingleProjection(
     const yearStartAge = startAge + y
     const yearEndAge = startAge + y + 1
 
-    // Determine active rates for this year based on breakpoints
+    // Determine active rates for this year. Each breakpoint that has already
+    // started supersedes earlier segments; the latest applicable wins. If
+    // breakpointRates wasn't provided, the initial rates apply throughout
+    // (back-compat with single-segment callers).
     let growthRate = rates.stockGrowth
     let inflationRate = rates.inflation
-    for (const bp of breakpoints) {
-      if (yearStartAge >= bp.startAge) {
-        // In a full MC run these would be per-segment samples. Here we use the
-        // provided rates as a proxy for the segment (MC overrides this via
-        // per-segment sampling in runMonteCarlo).
-        growthRate = rates.stockGrowth
-        inflationRate = rates.inflation
+    for (let k = 0; k < breakpoints.length; k++) {
+      if (yearStartAge >= breakpoints[k].startAge) {
+        const r = breakpointRates?.[k]
+        if (r !== undefined) {
+          growthRate = r.stockGrowth
+          inflationRate = r.inflation
+        }
       }
     }
 
@@ -103,6 +119,12 @@ export function runSingleProjection(
       }
     }
 
+    let contributionsThisYear = depleted
+      ? 0
+      : simAccounts.reduce((s, a) => s + a.annualContribution(yearStartAge, annualSalary), 0)
+    let socialSecurityThisYear = 0
+    let withdrawalsThisYear = 0
+
     // Annual withdrawal phase
     if (!depleted) {
       const inflatedExpenses = inflate(annualExpenses, 0, yearsFromStart, inflationRate)
@@ -118,6 +140,7 @@ export function runSingleProjection(
           inflationRate,
         )
       }
+      socialSecurityThisYear = ssIncome
 
       // One-time expenses due this year
       let oneTimeTotal = 0
@@ -155,6 +178,7 @@ export function runSingleProjection(
       const netNeed = Math.max(0, inflatedExpenses + oneTimeTotal - ssIncome - disposableIncome)
 
       if (netNeed > 0) {
+        const balBefore = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
         const shortfall = makeWithdrawals(
           simAccounts,
           netNeed,
@@ -188,10 +212,13 @@ export function runSingleProjection(
         // it's a temporary lockout (e.g. money exists but withdrawalStartAge
         // hasn't been reached) and the simulation continues.
         const totalAvailable = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
+        withdrawalsThisYear = Math.max(0, balBefore - totalAvailable)
         if (shortfall > 0.01 && totalAvailable < shortfall - 0.01) {
           depleted = true
           depleteAge = yearEndAge
           succeeded = false
+          contributionsThisYear = 0
+          socialSecurityThisYear = 0
           // Spec §3.3: portfolio remains at zero for the remainder of the projection.
           for (const acc of simAccounts) {
             acc.zero()
@@ -209,7 +236,14 @@ export function runSingleProjection(
       accountBalances[acc.id] = depleted ? 0 : acc.getBalance()
     }
 
-    yearlyResults.push({ age: yearEndAge, totalBalance, accountBalances })
+    yearlyResults.push({
+      age: yearEndAge,
+      totalBalance,
+      accountBalances,
+      contributions: contributionsThisYear,
+      socialSecurity: socialSecurityThisYear,
+      withdrawals: withdrawalsThisYear,
+    })
   }
 
   return { yearlyResults, succeeded, depleteAge }

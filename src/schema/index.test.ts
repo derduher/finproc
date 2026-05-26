@@ -181,4 +181,35 @@ describe('defaultInputs', () => {
     expect(inputs.initialInflationMax).toBe(0.04)
     expect(inputs.withdrawalStrategy).toBe(WithdrawalStrategy.TaxOptimal)
   })
+
+  it('defaults scenarioName to "Baseline plan"', () => {
+    const inputs = defaultInputs()
+    expect(inputs.scenarioName).toBe('Baseline plan')
+  })
+})
+
+describe('SimulationInputsSchema scenarioName', () => {
+  it('accepts a custom scenario name', () => {
+    const result = SimulationInputsSchema.safeParse({
+      ...defaultInputs(),
+      scenarioName: 'Retire at 60',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects an empty scenario name', () => {
+    const result = SimulationInputsSchema.safeParse({
+      ...defaultInputs(),
+      scenarioName: '',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a scenario name longer than 80 chars', () => {
+    const result = SimulationInputsSchema.safeParse({
+      ...defaultInputs(),
+      scenarioName: 'x'.repeat(81),
+    })
+    expect(result.success).toBe(false)
+  })
 })

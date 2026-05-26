@@ -124,6 +124,8 @@ export type SocialSecurity = z.infer<typeof SocialSecuritySchema>
 // ─── Simulation inputs ────────────────────────────────────────────────────────
 export const SimulationInputsSchema = z
   .object({
+    /** User-given name for this plan (shown in the TopBar chip) */
+    scenarioName: z.string().min(1).max(80),
     person: PersonSchema,
     accounts: z.array(AccountSchema).min(0),
 
@@ -202,6 +204,7 @@ export interface SensitivityResult {
 // ─── Default inputs ───────────────────────────────────────────────────────────
 export function defaultInputs(): SimulationInputs {
   return {
+    scenarioName: 'Baseline plan',
     person: {
       currentAge: 32,
       maxAge: 95,

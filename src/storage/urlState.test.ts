@@ -24,6 +24,40 @@ describe('urlState — round-trip', () => {
   it('decompressInputs returns null for invalid string', () => {
     expect(decompressInputs('not-valid-lzstring')).toBeNull()
   })
+
+  it('round-trips a custom scenario name', () => {
+    const inp = { ...defaultInputs(), scenarioName: 'Retire at 60' }
+    const decoded = decompressInputs(compressInputs(inp))
+    expect(decoded?.scenarioName).toBe('Retire at 60')
+  })
+
+  it('rejects decoded payload with empty scenario name', async () => {
+    const bad = { ...defaultInputs(), scenarioName: '' }
+    const { compressToEncodedURIComponent } = await import('lz-string')
+    const encoded = compressToEncodedURIComponent(JSON.stringify(bad))
+    expect(decompressInputs(encoded)).toBeNull()
+  })
+})
+
+describe('urlState — UI prefs round-trip', () => {
+  it('compressUiPrefs / decompressUiPrefs round-trips aesthetic/theme/density', async () => {
+    const { compressUiPrefs, decompressUiPrefs } = await import('./urlState')
+    const prefs = { aesthetic: 'cool' as const, theme: 'dark' as const, density: 'compact' as const }
+    const decoded = decompressUiPrefs(compressUiPrefs(prefs))
+    expect(decoded).toEqual(prefs)
+  })
+
+  it('decompressUiPrefs returns null for invalid string', async () => {
+    const { decompressUiPrefs } = await import('./urlState')
+    expect(decompressUiPrefs('garbage')).toBeNull()
+  })
+
+  it('decompressUiPrefs rejects payload with unknown aesthetic', async () => {
+    const { decompressUiPrefs } = await import('./urlState')
+    const { compressToEncodedURIComponent } = await import('lz-string')
+    const bad = compressToEncodedURIComponent(JSON.stringify({ aesthetic: 'neon', theme: 'light', density: 'comfortable' }))
+    expect(decompressUiPrefs(bad)).toBeNull()
+  })
 })
 
 describe('urlState — isShareable', () => {

@@ -1,7 +1,6 @@
 // Threadwell — retirement plot
 import { useEffect } from 'react'
 import { Frame } from './ui/frame/Frame'
-import { MobileChrome } from './ui/mobile/MobileChrome'
 import { PersonStep } from './ui/steps/PersonStep'
 import { AccountsStep } from './ui/steps/AccountsStep'
 import { MarketsStep } from './ui/steps/MarketsStep'
@@ -24,32 +23,42 @@ export default function App() {
   const activeStep = useStore((s) => s.ui.activeStep)
   const inputs = useStore((s) => s.inputs)
   const setInputs = useStore((s) => s.setInputs)
-  const { initialInputs, syncToUrl } = useUrlSync()
+  const aesthetic = useStore((s) => s.ui.aesthetic)
+  const theme = useStore((s) => s.ui.theme)
+  const density = useStore((s) => s.ui.density)
+  const setAesthetic = useStore((s) => s.setAesthetic)
+  const setTheme = useStore((s) => s.setTheme)
+  const setDensity = useStore((s) => s.setDensity)
+  const setLastCommittedAt = useStore((s) => s.setLastCommittedAt)
+  const { initialInputs, initialUiPrefs, syncToUrl } = useUrlSync()
 
-  // Restore from URL on first load.
-  // initialInputs is derived once from the URL at mount and never changes.
-  // setInputs is a stable Zustand action. This effect runs exactly once.
+  // Restore inputs + UI prefs from URL on first load. initialInputs/initialUiPrefs
+  // are derived once at mount and never change; setters are stable Zustand actions.
   useEffect(() => {
     if (initialInputs) setInputs(initialInputs)
-  }, [initialInputs, setInputs])
+    if (initialUiPrefs) {
+      setAesthetic(initialUiPrefs.aesthetic)
+      setTheme(initialUiPrefs.theme)
+      setDensity(initialUiPrefs.density)
+    }
+  }, [initialInputs, initialUiPrefs, setInputs, setAesthetic, setTheme, setDensity])
 
-  // Sync to URL whenever inputs change
+  // Sync inputs + UI prefs to URL whenever any change. The `onCommit` callback
+  // records when the debounced write lands, driving "auto-saved Ns ago".
   useEffect(() => {
-    syncToUrl(inputs)
-  }, [inputs, syncToUrl])
+    syncToUrl(
+      inputs,
+      { aesthetic, theme, density },
+      () => setLastCommittedAt(Date.now()),
+    )
+  }, [inputs, aesthetic, theme, density, syncToUrl, setLastCommittedAt])
 
   const StepComponent = STEPS[activeStep] ?? PersonStep
   const isResults = activeStep === 5
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
 
-  if (isMobile) {
-    return (
-      <MobileChrome>
-        <StepComponent />
-      </MobileChrome>
-    )
-  }
-
+  // Mobile vs. desktop chrome is handled by CSS media queries inside Frame —
+  // both chromes live in the DOM and the browser picks the right one at the
+  // 768px breakpoint. No JS resize listener, no remount on rotation.
   return (
     <Frame wide={isResults}>
       <StepComponent />

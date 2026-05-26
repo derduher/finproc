@@ -1,10 +1,24 @@
 import { runSingleProjection } from './projection'
+import { aggregateCashflows } from './cashflow'
 import { mulberry32, boxMullerNormal, p10p90ToMean, p10p90ToSigma, percentile } from '../math'
 import type { SimulationInputs } from '../schema'
 
+export interface MonteCarloYearlyResult {
+  age: number
+  p10: number
+  p50: number
+  p90: number
+  /** Median total contributions + match across runs (nominal $) */
+  contributionsMedian: number
+  /** Median Social Security income across runs (nominal $) */
+  socialSecurityMedian: number
+  /** Median gross withdrawals across runs (nominal $) */
+  withdrawalsMedian: number
+}
+
 export interface MonteCarloResult {
-  /** Percentile bands: one entry per year */
-  yearlyResults: Array<{ age: number; p10: number; p50: number; p90: number }>
+  /** Percentile bands + cashflow medians: one entry per year */
+  yearlyResults: MonteCarloYearlyResult[]
   successRate: number
   /** Median ending balance across all runs */
   p50EndBalance: number
@@ -13,6 +27,16 @@ export interface MonteCarloResult {
   /** Median depletion age across failing runs; undefined if all succeed */
   medianDepleteAge: number | undefined
 }
+
+export type ProgressStage = 'parse' | 'sample' | 'project' | 'aggregate'
+
+export interface ProgressEvent {
+  stage: ProgressStage
+  done: number
+  total: number
+}
+
+export type ProgressCallback = (event: ProgressEvent) => void
 
 /**
  * Run Monte Carlo simulation with `runCount` independent samples.
@@ -28,8 +52,11 @@ export function runMonteCarlo(
   inputs: SimulationInputs,
   runCount: number = 1000,
   baseSeed: number = inputs.seed,
+  onProgress?: ProgressCallback,
 ): MonteCarloResult {
+  onProgress?.({ stage: 'parse', done: 1, total: 1 })
   const rng = mulberry32(baseSeed)
+  onProgress?.({ stage: 'sample', done: 1, total: 1 })
 
   const {
     initialStockGrowthMin,
@@ -46,8 +73,15 @@ export function runMonteCarlo(
   const endBalances: number[] = []
   let successCount = 0
   const depleteAges: number[] = []
+  const perRunYears: import('./projection').YearEndState[][] = []
+
+  // Emit ~one project event per 5% of runs (min 10, max 100).
+  const projectInterval = Math.max(1, Math.floor(runCount / Math.min(100, Math.max(10, runCount / 20))))
 
   for (let run = 0; run < runCount; run++) {
+    if (onProgress && (run % projectInterval === 0 || run === runCount - 1)) {
+      onProgress({ stage: 'project', done: run, total: runCount })
+    }
     // Sample rates for the initial segment
     const initGrowthMean = p10p90ToMean(initialStockGrowthMin, initialStockGrowthMax)
     const initGrowthSigma = p10p90ToSigma(initialStockGrowthMin, initialStockGrowthMax)
@@ -78,26 +112,34 @@ export function runMonteCarlo(
     for (let y = 0; y < result.yearlyResults.length; y++) {
       balancesByYear[y].push(result.yearlyResults[y].totalBalance)
     }
+    perRunYears.push(result.yearlyResults)
   }
 
-  // Build yearly percentile bands
-  const yearlyResults = balancesByYear.map((balances, y) => {
+  // Build yearly percentile bands + cashflow medians
+  onProgress?.({ stage: 'aggregate', done: 0, total: 1 })
+  const cashflows = aggregateCashflows(perRunYears)
+  const yearlyResults: MonteCarloYearlyResult[] = balancesByYear.map((balances, y) => {
     const age = person.currentAge + y + 1
     return {
       age,
       p10: percentile(balances, 10),
       p50: percentile(balances, 50),
       p90: percentile(balances, 90),
+      contributionsMedian: cashflows[y]?.contributionsMedian ?? 0,
+      socialSecurityMedian: cashflows[y]?.socialSecurityMedian ?? 0,
+      withdrawalsMedian: cashflows[y]?.withdrawalsMedian ?? 0,
     }
   })
 
-  return {
+  const result: MonteCarloResult = {
     yearlyResults,
     successRate: successCount / runCount,
     p50EndBalance: percentile(endBalances, 50),
     p10EndBalance: percentile(endBalances, 10),
     medianDepleteAge: depleteAges.length > 0 ? percentile(depleteAges, 50) : undefined,
   }
+  onProgress?.({ stage: 'aggregate', done: 1, total: 1 })
+  return result
 }
 
 /**
@@ -136,8 +178,10 @@ function runSegmentedProjection(
   //
   // Future improvement: extend runSingleProjection to accept per-segment rate maps.
 
-  // Sample rates for each breakpoint segment (consumed from RNG for determinism)
-  const _segRates = inputs.breakpoints.map((bp) => {
+  // Sample one (growth, inflation) draw per breakpoint segment for this run.
+  // Order matters for PRNG determinism: each call to boxMullerNormal consumes
+  // two draws from `rng`.
+  const segRates = inputs.breakpoints.map((bp) => {
     const growthMean = p10p90ToMean(bp.stockGrowthMin, bp.stockGrowthMax)
     const growthSigma = p10p90ToSigma(bp.stockGrowthMin, bp.stockGrowthMax)
     const inflMean = p10p90ToMean(bp.inflationMin, bp.inflationMax)
@@ -148,9 +192,9 @@ function runSegmentedProjection(
     }
   })
 
-  void _segRates // consumed for PRNG determinism
-  return runSingleProjection(inputs, {
-    stockGrowth: initialGrowth,
-    inflation: initialInflation,
-  })
+  return runSingleProjection(
+    inputs,
+    { stockGrowth: initialGrowth, inflation: initialInflation },
+    segRates,
+  )
 }

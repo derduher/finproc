@@ -10,6 +10,10 @@ beforeEach(() => {
     ui: {
       activeStep: 0,
       displayMode: 'nominal',
+      aesthetic: 'warm',
+      theme: 'light',
+      density: 'comfortable',
+      lastCommittedAt: null,
     },
   })
 })
@@ -63,5 +67,57 @@ describe('useStore — UI state', () => {
       result.current.setDisplayMode('nominal')
     })
     expect(result.current.ui.displayMode).toBe('nominal')
+  })
+})
+
+describe('useStore — aesthetic / theme / density', () => {
+  it('defaults to warm / light / comfortable', () => {
+    const { result } = renderHook(() => useStore())
+    expect(result.current.ui.aesthetic).toBe('warm')
+    expect(result.current.ui.theme).toBe('light')
+    expect(result.current.ui.density).toBe('comfortable')
+  })
+
+  it('setAesthetic updates the aesthetic', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => { result.current.setAesthetic('cool') })
+    expect(result.current.ui.aesthetic).toBe('cool')
+    act(() => { result.current.setAesthetic('mono') })
+    expect(result.current.ui.aesthetic).toBe('mono')
+  })
+
+  it('setTheme toggles light/dark', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => { result.current.setTheme('dark') })
+    expect(result.current.ui.theme).toBe('dark')
+  })
+
+  it('setDensity toggles compact/comfortable', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => { result.current.setDensity('compact') })
+    expect(result.current.ui.density).toBe('compact')
+  })
+
+  it('preserves other UI state when setting aesthetic', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => {
+      result.current.setActiveStep(3)
+      result.current.setAesthetic('cool')
+    })
+    expect(result.current.ui.activeStep).toBe(3)
+    expect(result.current.ui.aesthetic).toBe('cool')
+  })
+})
+
+describe('useStore — lastCommittedAt', () => {
+  it('defaults to null', () => {
+    const { result } = renderHook(() => useStore())
+    expect(result.current.ui.lastCommittedAt).toBeNull()
+  })
+
+  it('setLastCommittedAt stores a timestamp', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => { result.current.setLastCommittedAt(1700000000000) })
+    expect(result.current.ui.lastCommittedAt).toBe(1700000000000)
   })
 })

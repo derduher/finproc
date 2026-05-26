@@ -1,51 +1,23 @@
-import { useState } from 'react'
-import { Field, NumInput } from '../shared/Field'
+import { useState, useEffect } from 'react'
 import { useStore } from '../../store'
 import { formatMoneyAbbreviated } from '../../math'
+import { PipeEditor } from './PipeEditor'
 import type { Account } from '../../schema'
 
 const TYPE_LABELS: Record<Account['type'], string> = {
-  roth: 'Roth',
-  traditional: 'Traditional / 401(k)',
-  taxable: 'Taxable brokerage',
+  roth: 'roth',
+  traditional: 'traditional',
+  taxable: 'taxable',
 }
 
-const TYPE_COLORS: Record<Account['type'], string> = {
-  roth: 'var(--good)',
-  traditional: 'var(--accent)',
-  taxable: 'var(--ink-3)',
-}
-
-function contribLabel(acc: Account): string {
-  if (!acc.contributionAmount) return 'No contributions'
-  return acc.contributionType === 'percent'
-    ? `${(acc.contributionAmount * 100).toFixed(0)}% salary`
-    : `$${acc.contributionAmount}/mo`
-}
-
-function AccountCard({ acc, onEdit }: { acc: Account; onEdit: () => void }) {
-  return (
-    <div
-      className="card"
-      onClick={onEdit}
-      role="button"
-      style={{ cursor: 'pointer', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}
-    >
-      <div>
-        <div style={{ fontSize: 11, fontWeight: 600, color: TYPE_COLORS[acc.type], textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
-          {TYPE_LABELS[acc.type]}
-        </div>
-        <div style={{ fontWeight: 500 }}>{acc.name}</div>
-        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-          {contribLabel(acc)} · Withdraw from {acc.withdrawalStartAge}
-        </div>
-      </div>
-      <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-        <div className="num" style={{ fontSize: 18, fontWeight: 600 }}>{formatMoneyAbbreviated(acc.balance)}</div>
-        <div className="micro">balance</div>
-      </div>
-    </div>
-  )
+function contribMicro(acc: Account, annualSalary: number): string {
+  if (!acc.contributionAmount) return 'no contributions'
+  if (acc.contributionType === 'percent') {
+    const monthly = (acc.contributionAmount * annualSalary) / 12
+    return `+ $${Math.round(monthly).toLocaleString()}/mo contrib`
+  }
+  const mult = acc.contributionFrequency === 'weekly' ? 52 / 12 : acc.contributionFrequency === 'semi-monthly' ? 2 : 1
+  return `+ $${Math.round(acc.contributionAmount * mult).toLocaleString()}/mo contrib`
 }
 
 function newAccount(): Account {
@@ -62,124 +34,146 @@ function newAccount(): Account {
   }
 }
 
+function AccountCard({
+  acc,
+  active,
+  onSelect,
+}: {
+  acc: Account
+  active: boolean
+  onSelect: () => void
+}) {
+  const annualSalary = useStore((s) => s.inputs.person.annualSalary)
+  const typeColor =
+    acc.type === 'traditional' ? 'var(--accent-soft)' : acc.type === 'roth' ? 'var(--good-soft)' : 'var(--bg-sunk)'
+  const typeInk =
+    acc.type === 'traditional' ? 'var(--accent-ink)' : acc.type === 'roth' ? 'var(--good)' : 'var(--ink-2)'
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
+      className="card"
+      style={{
+        padding: 14,
+        width: 200,
+        cursor: 'pointer',
+        borderColor: active ? 'var(--ink)' : 'var(--line)',
+        boxShadow: active ? '0 0 0 1px var(--ink)' : 'none',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+        <div
+          className="badge"
+          style={{ background: typeColor, color: typeInk, borderColor: 'transparent' }}
+        >
+          {TYPE_LABELS[acc.type]}
+        </div>
+        {active && <span style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.06em' }}>EDITING</span>}
+      </div>
+      <div style={{ fontSize: 14, color: 'var(--ink)', marginBottom: 2 }}>{acc.name}</div>
+      <div className="num" style={{ fontSize: 20, color: 'var(--ink)', marginTop: 4 }}>
+        {formatMoneyAbbreviated(acc.balance)}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>{contribMicro(acc, annualSalary)}</div>
+    </div>
+  )
+}
+
 export function AccountsStep() {
   const accounts = useStore((s) => s.inputs.accounts)
+  const annualSalary = useStore((s) => s.inputs.person.annualSalary)
   const patchInputs = useStore((s) => s.patchInputs)
-  const [editing, setEditing] = useState<string | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(accounts[0]?.id ?? null)
 
-  const editingAcc = accounts.find((a) => a.id === editing)
+  // Keep the active id valid when accounts change
+  useEffect(() => {
+    if (activeId && !accounts.find((a) => a.id === activeId)) {
+      setActiveId(accounts[0]?.id ?? null)
+    } else if (!activeId && accounts.length > 0) {
+      setActiveId(accounts[0].id)
+    }
+  }, [accounts, activeId])
+
+  const active = accounts.find((a) => a.id === activeId) ?? null
+
+  const updateAccount = (id: string, patch: Partial<Account>) => {
+    patchInputs({ accounts: accounts.map((a) => (a.id === id ? { ...a, ...patch } : a)) })
+  }
 
   const addAccount = () => {
     const acc = newAccount()
     patchInputs({ accounts: [...accounts, acc] })
-    setEditing(acc.id)
-  }
-
-  const updateAccount = (id: string, patch: Partial<Account>) => {
-    patchInputs({
-      accounts: accounts.map((a) => a.id === id ? { ...a, ...patch } : a),
-    })
+    setActiveId(acc.id)
   }
 
   const removeAccount = (id: string) => {
     patchInputs({ accounts: accounts.filter((a) => a.id !== id) })
-    setEditing(null)
-  }
-
-  if (editingAcc) {
-    return (
-      <div style={{ maxWidth: 640 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>← Back</button>
-          <h2 style={{ margin: 0 }}>Edit account</h2>
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ marginLeft: 'auto', color: 'var(--bad)' }}
-            onClick={() => removeAccount(editingAcc.id)}
-          >
-            Remove
-          </button>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-          <div style={{ gridColumn: '1/-1' }}>
-            <Field label="Name">
-              <input
-                className="field"
-                style={{ width: '100%' }}
-                value={editingAcc.name}
-                onChange={(e) => updateAccount(editingAcc.id, { name: e.target.value })}
-              />
-            </Field>
-          </div>
-
-          <Field label="Account type">
-            <select
-              className="field"
-              value={editingAcc.type}
-              onChange={(e) => updateAccount(editingAcc.id, { type: e.target.value as Account['type'] })}
-            >
-              <option value="roth">Roth IRA</option>
-              <option value="traditional">Traditional / 401(k)</option>
-              <option value="taxable">Taxable brokerage</option>
-            </select>
-          </Field>
-
-          <Field label="Current balance">
-            <NumInput
-              type="number" min={0} step={1000} prefix="$"
-              value={editingAcc.balance}
-              onChange={(e) => updateAccount(editingAcc.id, { balance: Number(e.target.value) })}
-            />
-          </Field>
-
-          <Field label="Monthly contribution">
-            <NumInput
-              type="number" min={0} step={100} prefix="$"
-              value={editingAcc.contributionAmount}
-              onChange={(e) => updateAccount(editingAcc.id, { contributionAmount: Number(e.target.value) })}
-            />
-          </Field>
-
-          <Field label="Contribute until age">
-            <NumInput
-              type="number" min={0} max={130}
-              value={editingAcc.contributionEndAge}
-              onChange={(e) => updateAccount(editingAcc.id, { contributionEndAge: Number(e.target.value) })}
-            />
-          </Field>
-
-          <Field label="Withdraw from age">
-            <NumInput
-              type="number" min={0} max={130}
-              value={editingAcc.withdrawalStartAge}
-              onChange={(e) => updateAccount(editingAcc.id, { withdrawalStartAge: Number(e.target.value) })}
-            />
-          </Field>
-        </div>
-      </div>
-    )
   }
 
   return (
-    <div style={{ maxWidth: 640 }}>
-      <h2 style={{ marginBottom: 4 }}>Accounts</h2>
-      <p className="muted" style={{ marginBottom: 20, fontSize: 13 }}>
-        Add all your retirement and investment accounts.
+    <div style={{ maxWidth: 980 }}>
+      <div style={{ marginBottom: 20 }}>
+        <div className="label" style={{ marginBottom: 6 }}>Step 2 of 6 · accounts</div>
+        <h1>What are you saving, where?</h1>
+      </div>
+
+      <p className="muted" style={{ fontSize: 14, marginBottom: 16, maxWidth: 640 }}>
+        Three account types: taxable, traditional (401k/IRA), Roth. Pick one below to edit its pipes.
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Account cards row */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
         {accounts.map((acc) => (
-          <AccountCard key={acc.id} acc={acc} onEdit={() => setEditing(acc.id)} />
+          <AccountCard
+            key={acc.id}
+            acc={acc}
+            active={acc.id === activeId}
+            onSelect={() => setActiveId(acc.id)}
+          />
         ))}
         <button
-          className="btn"
-          style={{ justifyContent: 'center', borderStyle: 'dashed' }}
+          type="button"
           onClick={addAccount}
+          className="card"
+          style={{
+            padding: 14,
+            width: 130,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--ink-3)',
+            border: '1px dashed var(--line-strong)',
+            cursor: 'pointer',
+            background: 'transparent',
+            font: 'inherit',
+          }}
         >
-          + Add account
+          <div style={{ fontSize: 24, lineHeight: 1 }}>+</div>
+          <div style={{ fontSize: 12, marginTop: 6 }}>add account</div>
         </button>
       </div>
+
+      {active ? (
+        <PipeEditor
+          account={active}
+          annualSalary={annualSalary}
+          onChange={(patch) => updateAccount(active.id, patch)}
+          onDelete={() => removeAccount(active.id)}
+        />
+      ) : (
+        <div className="card card-sunk" style={{ padding: 20, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+          Add an account above to start editing.
+        </div>
+      )}
     </div>
   )
 }

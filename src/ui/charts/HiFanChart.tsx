@@ -6,11 +6,16 @@ interface Props {
   width?: number
   height?: number
   retireAge?: number
+  /** When true, renders a depletion marker at depleteAge on the x-axis */
+  depleted?: boolean
+  depleteAge?: number
+  /** Compact variant for sidebars — hides labels, tighter padding */
+  inline?: boolean
 }
 
 const PAD = { top: 16, right: 48, bottom: 32, left: 56 }
 
-export function HiFanChart({ result, width = 560, height = 280, retireAge }: Props) {
+export function HiFanChart({ result, width = 560, height = 280, retireAge, depleted = false, depleteAge, inline = false }: Props) {
   const { yearlyResults } = result
   if (!yearlyResults.length) return null
 
@@ -63,8 +68,23 @@ export function HiFanChart({ result, width = 560, height = 280, retireAge }: Pro
         {/* Retire age marker */}
         {retireAge && retireAge >= minAge && retireAge <= maxAge && (
           <g transform={`translate(${xScale(retireAge)},0)`}>
-            <line y1={0} y2={H} stroke="var(--accent)" strokeWidth={1} strokeDasharray="4 4" />
-            <text y={H + 20} textAnchor="middle" fill="var(--accent)" fontSize={10}>Retire</text>
+            <line y1={0} y2={H} stroke="var(--ink-3)" strokeWidth={1} strokeDasharray="3 4" />
+            {!inline && (
+              <text x={6} y={12} fill="var(--ink-3)" fontSize={11} fontFamily="var(--font-body)">
+                retire · age {retireAge}
+              </text>
+            )}
+          </g>
+        )}
+
+        {/* Depletion marker */}
+        {depleted && depleteAge !== undefined && depleteAge >= minAge && depleteAge <= maxAge && (
+          <g transform={`translate(${xScale(depleteAge)},0)`}>
+            <line y1={yScale(0) - 12} y2={yScale(0)} stroke="var(--bad)" strokeWidth={1.4} />
+            <circle cx={0} cy={yScale(0)} r={4} fill="var(--bad)" />
+            <text x={8} y={yScale(0) - 6} fill="var(--bad)" fontSize={11} fontFamily="var(--font-body)">
+              P10 depleted · age {depleteAge}
+            </text>
           </g>
         )}
 

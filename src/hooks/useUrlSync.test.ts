@@ -58,4 +58,43 @@ describe('useUrlSync', () => {
     // Should NOT have written (unmounted before debounce fired)
     expect(pushStateSpy).not.toHaveBeenCalled()
   })
+
+  it('includes a ?ui= param when prefs are passed', () => {
+    const pushStateSpy = vi.spyOn(window.history, 'pushState').mockImplementation(() => {})
+    const { result } = renderHook(() => useUrlSync())
+
+    act(() => {
+      result.current.syncToUrl(defaultInputs(), { aesthetic: 'cool', theme: 'dark', density: 'compact' })
+    })
+    act(() => { vi.advanceTimersByTime(500) })
+
+    expect(pushStateSpy).toHaveBeenCalledTimes(1)
+    const url = pushStateSpy.mock.calls[0][2] as string
+    expect(url).toContain('ui=')
+    expect(url).toContain('s=')
+  })
+
+  it('invokes onCommit after the debounced write fires', () => {
+    vi.spyOn(window.history, 'pushState').mockImplementation(() => {})
+    const onCommit = vi.fn()
+    const { result } = renderHook(() => useUrlSync())
+
+    act(() => { result.current.syncToUrl(defaultInputs(), undefined, onCommit) })
+    expect(onCommit).not.toHaveBeenCalled()
+
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(onCommit).toHaveBeenCalledTimes(1)
+  })
+
+  it('exposes initialUiPrefs from ?ui= param', async () => {
+    const { compressUiPrefs } = await import('../storage/urlState')
+    const encoded = compressUiPrefs({ aesthetic: 'mono', theme: 'dark', density: 'compact' })
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, search: `?ui=${encoded}` },
+      writable: true,
+    })
+
+    const { result } = renderHook(() => useUrlSync())
+    expect(result.current.initialUiPrefs).toEqual({ aesthetic: 'mono', theme: 'dark', density: 'compact' })
+  })
 })

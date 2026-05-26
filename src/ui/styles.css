@@ -238,6 +238,11 @@
 .flow-dash { stroke-dasharray: 6 6; animation: flowDash 1.6s linear infinite; }
 .flow-pulse { animation: flowGlow 2.2s ease-in-out infinite; }
 
+@media (prefers-reduced-motion: reduce) {
+  .flow-dash { animation: none; }
+  .flow-pulse { animation: none; }
+}
+
 /* shimmer for loading */
 @keyframes shimmer {
   0% { background-position: -400px 0; }
@@ -253,3 +258,33 @@
 /* Hide scrollbars on artboards */
 .hf::-webkit-scrollbar { display: none; }
 .hf { scrollbar-width: none; }
+
+/* ── Responsive shell visibility ─────────────────────────────────────
+   Both desktop and mobile chrome live in the DOM at all times. The
+   browser picks which to show at the 768px breakpoint — no JS resize
+   listener needed, no remount on viewport changes. */
+.shell-desktop-only { display: flex; }
+.shell-mobile-only { display: none; }
+
+/* Pipe editor body — desktop: side-by-side; mobile: stacked. */
+[data-pipe-editor] {
+  padding: 20px;
+  display: flex;
+  flex-direction: row;
+  gap: 28px;
+}
+[data-pipe-editor] > * { min-width: 0; }
+
+/* Results metrics grid — desktop: 4-col (success card wider); mobile: 2-col. */
+[data-metrics-grid] {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .shell-desktop-only { display: none !important; }
+  .shell-mobile-only { display: flex !important; }
+  [data-pipe-editor] { flex-direction: column; }
+  [data-metrics-grid] { grid-template-columns: 1fr 1fr; }
+}

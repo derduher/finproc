@@ -306,6 +306,60 @@ describe('runSingleProjection — post-depletion balance behaviour', () => {
   })
 })
 
+describe('runSingleProjection — per-segment rates', () => {
+  it('breakpointRates[k] is applied to years on/after breakpoints[k].startAge', () => {
+    // 10-year horizon, no expenses, one Roth account starting at $100K.
+    // Initial segment: 10% (covers age 60-65).
+    // Breakpoint at 65: 0% (covers age 65-70).
+    // Expected ending balance: 100K × (1.10)^5 × (1.00)^5 = 161,051
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 70 },
+        accounts: [{
+          id: 'a', name: 'Roth', type: 'roth',
+          balance: 100000,
+          contributionAmount: 0,
+          contributionType: 'flat', contributionFrequency: 'monthly',
+          contributionEndAge: 59, withdrawalStartAge: 59,
+        }],
+        annualExpenses: 0,
+        breakpoints: [{ startAge: 65, stockGrowthMin: 0, stockGrowthMax: 0, inflationMin: 0, inflationMax: 0 }],
+      }),
+      { stockGrowth: 0.10, inflation: 0 },
+      [{ stockGrowth: 0, inflation: 0 }],
+    )
+    const endBalance = result.yearlyResults.at(-1)!.totalBalance
+    // 100K × 1.1^5 (monthly compounded) × 1.0^5 ≈ 164,530
+    // Allow 2% tolerance for monthly compounding approximation
+    const expected = 100000 * Math.pow(1 + Math.pow(1.10, 1/12) - 1, 5 * 12) * 1
+    expect(endBalance).toBeCloseTo(expected, -3)
+    expect(endBalance).toBeLessThan(100000 * Math.pow(1.10, 10)) // strictly less than 10yr@10%
+  })
+
+  it('omitting breakpointRates → initial rates used throughout (back-compat)', () => {
+    // Same setup, no breakpointRates arg → initial 10% applies for all 10 years
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 70 },
+        accounts: [{
+          id: 'a', name: 'Roth', type: 'roth',
+          balance: 100000,
+          contributionAmount: 0,
+          contributionType: 'flat', contributionFrequency: 'monthly',
+          contributionEndAge: 59, withdrawalStartAge: 59,
+        }],
+        annualExpenses: 0,
+        breakpoints: [{ startAge: 65, stockGrowthMin: 0, stockGrowthMax: 0, inflationMin: 0, inflationMax: 0 }],
+      }),
+      { stockGrowth: 0.10, inflation: 0 },
+    )
+    const endBalance = result.yearlyResults.at(-1)!.totalBalance
+    // 10 years at 10% compounded monthly
+    const expected = 100000 * Math.pow(1 + Math.pow(1.10, 1/12) - 1, 10 * 12)
+    expect(endBalance).toBeCloseTo(expected, -3)
+  })
+})
+
 describe('runSingleProjection — breakpoints', () => {
   it('breakpoint at age 65 changes growth rate for subsequent months', () => {
     const highGrowth = runSingleProjection(
