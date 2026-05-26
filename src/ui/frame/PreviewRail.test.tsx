@@ -40,7 +40,7 @@ describe('PreviewRail — live success rate', () => {
   it('renders the success% from useSimulation', async () => {
     const { useSimulation } = await import('../../hooks/useSimulation')
     vi.mocked(useSimulation).mockReturnValue({
-      result: MOCK_RESULT, loading: false, stale: false, error: null,
+      result: MOCK_RESULT, loading: false, stale: false, error: null, progress: undefined,
     })
     render(<PreviewRail />)
     expect(screen.getByText(/84/)).toBeInTheDocument()
@@ -49,7 +49,7 @@ describe('PreviewRail — live success rate', () => {
   it('renders the fresh badge when not stale', async () => {
     const { useSimulation } = await import('../../hooks/useSimulation')
     vi.mocked(useSimulation).mockReturnValue({
-      result: MOCK_RESULT, loading: false, stale: false, error: null,
+      result: MOCK_RESULT, loading: false, stale: false, error: null, progress: undefined,
     })
     render(<PreviewRail />)
     expect(screen.getByText(/fresh/i)).toBeInTheDocument()
@@ -58,7 +58,7 @@ describe('PreviewRail — live success rate', () => {
   it('renders the recomputing badge when stale', async () => {
     const { useSimulation } = await import('../../hooks/useSimulation')
     vi.mocked(useSimulation).mockReturnValue({
-      result: MOCK_RESULT, loading: false, stale: true, error: null,
+      result: MOCK_RESULT, loading: false, stale: true, error: null, progress: undefined,
     })
     render(<PreviewRail />)
     expect(screen.getByText(/recomputing/i)).toBeInTheDocument()
@@ -67,7 +67,7 @@ describe('PreviewRail — live success rate', () => {
   it('shows a placeholder while result is null', async () => {
     const { useSimulation } = await import('../../hooks/useSimulation')
     vi.mocked(useSimulation).mockReturnValue({
-      result: null, loading: true, stale: false, error: null,
+      result: null, loading: true, stale: false, error: null, progress: undefined,
     })
     render(<PreviewRail />)
     expect(screen.getByText(/live preview/i)).toBeInTheDocument()
@@ -78,7 +78,7 @@ describe('PreviewRail — metrics', () => {
   it('renders median and p10 metrics', async () => {
     const { useSimulation } = await import('../../hooks/useSimulation')
     vi.mocked(useSimulation).mockReturnValue({
-      result: MOCK_RESULT, loading: false, stale: false, error: null,
+      result: MOCK_RESULT, loading: false, stale: false, error: null, progress: undefined,
     })
     render(<PreviewRail />)
     // Use the .label elements (lowercase "median" / "p10") to avoid matching

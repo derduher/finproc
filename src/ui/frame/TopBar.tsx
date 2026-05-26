@@ -145,7 +145,7 @@ export function TopBar() {
                 className="btn btn-ghost btn-sm"
                 style={{ display: 'flex', justifyContent: 'flex-start', width: '100%', textAlign: 'left' }}
                 onClick={() => {
-                  saveScenario(inputs)
+                  saveScenario(inputs.scenarioName, inputs)
                   setScenarioMenuOpen(false)
                 }}
               >

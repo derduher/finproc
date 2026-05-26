@@ -36,8 +36,8 @@ vi.mock('../storage/cache', async (importOriginal) => {
 
 const MOCK_RESULT: MonteCarloResult = {
   yearlyResults: [
-    { age: 63, p10: 800_000, p50: 1_200_000, p90: 1_600_000 },
-    { age: 64, p10: 750_000, p50: 1_150_000, p90: 1_650_000 },
+    { age: 63, p10: 800_000, p50: 1_200_000, p90: 1_600_000, contributionsMedian: 0, socialSecurityMedian: 0, withdrawalsMedian: 0 },
+    { age: 64, p10: 750_000, p50: 1_150_000, p90: 1_650_000, contributionsMedian: 0, socialSecurityMedian: 0, withdrawalsMedian: 0 },
   ],
   successRate: 0.87,
   p50EndBalance: 1_150_000,

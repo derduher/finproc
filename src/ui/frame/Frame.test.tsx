@@ -117,10 +117,11 @@ describe('Frame — footer buttons', () => {
     render(<Frame wide><div>x</div></Frame>)
     fireEvent.click(screen.getByRole('button', { name: /save scenario/i }))
     expect(mockSaveScenario).toHaveBeenCalledTimes(1)
-    // First arg should be the current inputs object
-    expect(mockSaveScenario).toHaveBeenCalledWith(expect.objectContaining({
-      scenarioName: expect.any(String),
-    }))
+    // saveScenario(name, inputs)
+    expect(mockSaveScenario).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ scenarioName: expect.any(String) }),
+    )
   })
 })
 

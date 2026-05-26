@@ -25,7 +25,7 @@ describe('simulate — progress events', () => {
     await simulate(BASE_INPUTS, 20, onProgress)
 
     const stages = onProgress.mock.calls.map(([p]) => p.stage)
-    const firstIdx = (s: string) => stages.indexOf(s)
+    const firstIdx = (s: ProgressEvent['stage']) => stages.indexOf(s)
     expect(firstIdx('parse')).toBeGreaterThanOrEqual(0)
     expect(firstIdx('sample')).toBeGreaterThan(firstIdx('parse'))
     expect(firstIdx('project')).toBeGreaterThan(firstIdx('sample'))

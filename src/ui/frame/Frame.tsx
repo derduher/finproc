@@ -86,7 +86,7 @@ export function Frame({ children, wide }: FrameProps) {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => saveScenario(inputs)}
+                  onClick={() => saveScenario(inputs.scenarioName, inputs)}
                 >
                   Save scenario
                 </button>

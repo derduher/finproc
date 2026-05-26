@@ -27,7 +27,7 @@ class MockWorker {
 }
 
 const MOCK_RESULT: MonteCarloResult = {
-  yearlyResults: [{ age: 63, p10: 1_000_000, p50: 1_200_000, p90: 1_500_000 }],
+  yearlyResults: [{ age: 63, p10: 1_000_000, p50: 1_200_000, p90: 1_500_000, contributionsMedian: 0, socialSecurityMedian: 0, withdrawalsMedian: 0 }],
   successRate: 0.92,
   p50EndBalance: 1_200_000,
   p10EndBalance: 1_000_000,
