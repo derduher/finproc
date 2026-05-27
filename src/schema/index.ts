@@ -48,6 +48,13 @@ export const PersonSchema = z
   .object({
     currentAge: z.number().int().min(0).max(100),
     maxAge: z.number().int().min(1).max(130),
+    /**
+     * Age at which the user stops working and starts drawing on accounts.
+     * Drives chart markers and the default contributionEndAge / withdrawalStartAge
+     * on new accounts. Defaults to 62 (typical earliest-Social-Security target)
+     * for back-compat with older URLs that didn't carry this field.
+     */
+    retirementAge: z.number().int().min(0).max(130).default(62),
     annualSalary: z.number().min(0),
     salaryGrowthRate: z.number().min(-1).max(1),
     marginalTaxRate: z.number().min(0).max(1),
@@ -56,6 +63,10 @@ export const PersonSchema = z
   .refine((p) => p.maxAge > p.currentAge, {
     message: 'maxAge must be greater than currentAge',
     path: ['maxAge'],
+  })
+  .refine((p) => p.retirementAge >= p.currentAge && p.retirementAge <= p.maxAge, {
+    message: 'retirementAge must be between currentAge and maxAge (inclusive)',
+    path: ['retirementAge'],
   })
 
 export type Person = z.infer<typeof PersonSchema>
@@ -208,6 +219,7 @@ export function defaultInputs(): SimulationInputs {
     person: {
       currentAge: 32,
       maxAge: 95,
+      retirementAge: 62,
       annualSalary: 95000,
       salaryGrowthRate: 0.03,
       marginalTaxRate: 0.24,

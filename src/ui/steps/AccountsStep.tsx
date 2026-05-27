@@ -20,7 +20,7 @@ function contribMicro(acc: Account, annualSalary: number): string {
   return `+ $${Math.round(acc.contributionAmount * mult).toLocaleString()}/mo contrib`
 }
 
-function newAccount(): Account {
+function newAccount(retirementAge: number): Account {
   return {
     id: crypto.randomUUID(),
     name: 'New account',
@@ -29,8 +29,11 @@ function newAccount(): Account {
     contributionAmount: 500,
     contributionType: 'flat',
     contributionFrequency: 'monthly',
-    contributionEndAge: 62,
-    withdrawalStartAge: 59,
+    // Default contribution-stop and withdrawal-start to the user's
+    // retirementAge so new accounts respect the plan timeline by default.
+    // The user can override per-account in the PipeEditor.
+    contributionEndAge: retirementAge,
+    withdrawalStartAge: retirementAge,
   }
 }
 
@@ -90,6 +93,7 @@ function AccountCard({
 export function AccountsStep() {
   const accounts = useStore((s) => s.inputs.accounts)
   const annualSalary = useStore((s) => s.inputs.person.annualSalary)
+  const retirementAge = useStore((s) => s.inputs.person.retirementAge)
   const patchInputs = useStore((s) => s.patchInputs)
   const [activeId, setActiveId] = useState<string | null>(accounts[0]?.id ?? null)
 
@@ -109,7 +113,7 @@ export function AccountsStep() {
   }
 
   const addAccount = () => {
-    const acc = newAccount()
+    const acc = newAccount(retirementAge)
     patchInputs({ accounts: [...accounts, acc] })
     setActiveId(acc.id)
   }

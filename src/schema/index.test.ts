@@ -57,6 +57,51 @@ describe('PersonSchema', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  it('accepts retirementAge when present', () => {
+    const result = PersonSchema.safeParse({
+      currentAge: 32,
+      maxAge: 95,
+      retirementAge: 65,
+      annualSalary: 95000,
+      salaryGrowthRate: 0.03,
+      marginalTaxRate: 0.24,
+      ltcgRate: 0.15,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.retirementAge).toBe(65)
+  })
+
+  it('fills in default retirementAge when missing (back-compat with older URLs)', () => {
+    const result = PersonSchema.safeParse({
+      currentAge: 32,
+      maxAge: 95,
+      annualSalary: 95000,
+      salaryGrowthRate: 0.03,
+      marginalTaxRate: 0.24,
+      ltcgRate: 0.15,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      // Default retirementAge should be a sensible value between currentAge and maxAge.
+      expect(typeof result.data.retirementAge).toBe('number')
+      expect(result.data.retirementAge).toBeGreaterThan(0)
+      expect(result.data.retirementAge).toBeLessThan(100)
+    }
+  })
+
+  it('rejects retirementAge outside [currentAge, maxAge]', () => {
+    const result = PersonSchema.safeParse({
+      currentAge: 50,
+      maxAge: 95,
+      retirementAge: 40, // before currentAge
+      annualSalary: 95000,
+      salaryGrowthRate: 0.03,
+      marginalTaxRate: 0.24,
+      ltcgRate: 0.15,
+    })
+    expect(result.success).toBe(false)
+  })
 })
 
 describe('AccountSchema', () => {
@@ -180,6 +225,10 @@ describe('defaultInputs', () => {
     expect(inputs.initialInflationMin).toBe(0.02)
     expect(inputs.initialInflationMax).toBe(0.04)
     expect(inputs.withdrawalStrategy).toBe(WithdrawalStrategy.TaxOptimal)
+  })
+
+  it('defaults retirementAge to 62', () => {
+    expect(defaultInputs().person.retirementAge).toBe(62)
   })
 
   it('defaults scenarioName to "Baseline plan"', () => {

@@ -46,15 +46,18 @@ export function ResultsStep() {
   const isWarn = successRateValid && result.successRate >= 0.5 && result.successRate < 0.8
   const successColor = isGood ? 'var(--good)' : isWarn ? 'var(--accent)' : 'var(--bad)'
 
-  const accounts = inputs.accounts
-  const retireAge =
-    accounts.length > 0
-      ? Math.max(...accounts.map((a) => a.contributionEndAge))
-      : inputs.person.currentAge
+  // Retire marker on the fan chart is the user's explicit retirement age,
+  // not max(account.contributionEndAge) — that derived form went wrong any
+  // time an account had a stale contributionEndAge with zero contribution.
+  const retireAge = inputs.person.retirementAge
   const ssAge = inputs.socialSecurity?.claimAge
 
   // Depletion marker: show when >10% of runs depleted and we have a median depletion age
   const depleted = result.medianDepleteAge !== undefined && result.successRate < 0.9
+
+  // First age where the P10 portfolio path hits zero (matches what the user
+  // sees in the fan chart). Undefined when P10 stays positive through maxAge.
+  const p10DepleteAge = result.yearlyResults.find((r) => r.p10 <= 0)?.age
 
   return (
     <div style={{ maxWidth: 1200, display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -189,9 +192,11 @@ export function ResultsStep() {
               color: 'var(--ink-3)',
             }}
           >
-            {result.medianDepleteAge
-              ? `Earliest failure: age ${inputs.person.currentAge + 1}`
-              : 'No depletion in any run'}
+            {p10DepleteAge !== undefined
+              ? `P10 hits zero at age ${p10DepleteAge}`
+              : result.medianDepleteAge
+                ? `P10 survives to age ${inputs.person.maxAge}`
+                : 'No depletion in any run'}
           </div>
         </div>
       </div>

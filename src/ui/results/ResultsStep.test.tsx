@@ -100,6 +100,70 @@ beforeEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+describe('ResultsStep — earliest-failure sub-label', () => {
+  it('shows the actual P10 depletion age when p10 series hits zero', async () => {
+    // fakeResult.yearlyResults p10 = max(0, 300_000 + i * 5_000) — never hits zero,
+    // so for this test we override the mock with a yearlyResults containing a P10 zero.
+    const { useSimulation } = await import('../../hooks/useSimulation')
+    vi.mocked(useSimulation).mockReturnValueOnce({
+      result: {
+        ...fakeResult,
+        yearlyResults: [
+          { age: 32, p10: 100, p50: 200, p90: 300, contributionsMedian: 0, socialSecurityMedian: 0, withdrawalsMedian: 0 },
+          { age: 75, p10: 0, p50: 200, p90: 300, contributionsMedian: 0, socialSecurityMedian: 0, withdrawalsMedian: 0 },
+          { age: 76, p10: 0, p50: 200, p90: 300, contributionsMedian: 0, socialSecurityMedian: 0, withdrawalsMedian: 0 },
+        ],
+      },
+      loading: false,
+      stale: false,
+      error: null,
+      progress: undefined,
+    })
+    const { container } = render(<ResultsStep />)
+    expect(container.textContent).toMatch(/P10.*age 75/i)
+    expect(container.textContent).not.toMatch(/Earliest failure: age 33/)
+  })
+
+  it('shows survival message when P10 never depletes', async () => {
+    const { useSimulation } = await import('../../hooks/useSimulation')
+    vi.mocked(useSimulation).mockReturnValueOnce({
+      result: {
+        ...fakeResult,
+        medianDepleteAge: 99,
+        yearlyResults: [
+          { age: 32, p10: 1_000_000, p50: 200, p90: 300, contributionsMedian: 0, socialSecurityMedian: 0, withdrawalsMedian: 0 },
+          { age: 95, p10: 500_000, p50: 200, p90: 300, contributionsMedian: 0, socialSecurityMedian: 0, withdrawalsMedian: 0 },
+        ],
+      },
+      loading: false,
+      stale: false,
+      error: null,
+      progress: undefined,
+    })
+    const { container } = render(<ResultsStep />)
+    expect(container.textContent).toMatch(/P10 survives/i)
+  })
+})
+
+describe('ResultsStep — retirement age sourcing', () => {
+  it('retire marker on fan chart uses inputs.person.retirementAge (not max of accounts)', () => {
+    useStore.setState((s) => ({
+      inputs: {
+        ...s.inputs,
+        person: { ...s.inputs.person, currentAge: 32, retirementAge: 65, maxAge: 95 },
+        // Accounts have heterogeneous contributionEndAge — should NOT drive retireAge.
+        accounts: [
+          { id: 'a', name: 'a', type: 'roth' as const, balance: 100, contributionAmount: 0, contributionType: 'flat' as const, contributionFrequency: 'monthly' as const, contributionEndAge: 80, withdrawalStartAge: 59 },
+        ],
+      },
+    }))
+    const { container } = render(<ResultsStep />)
+    // Fan chart text contains "retire · age 65" (not 80)
+    expect(container.textContent).toMatch(/retire.*age 65/i)
+    expect(container.textContent).not.toMatch(/retire.*age 80/i)
+  })
+})
+
 describe('ResultsStep — displayMode (nominal/real)', () => {
   it('renders nominal-mode median ending balance ($2.4M) by default', () => {
     const { container } = render(<ResultsStep />)

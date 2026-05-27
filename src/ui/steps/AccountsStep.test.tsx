@@ -52,6 +52,19 @@ describe('AccountsStep — account cards', () => {
     expect(screen.getByText(/add account/i)).toBeInTheDocument()
   })
 
+  it('+ add account creates an account with contributionEndAge defaulted to retirementAge', () => {
+    useStore.setState((s) => ({
+      inputs: { ...s.inputs, person: { ...s.inputs.person, retirementAge: 67 }, accounts: [] },
+    }))
+    render(<AccountsStep />)
+    const addBtn = screen.getByText(/add account/i).closest('button') as HTMLButtonElement
+    fireEvent.click(addBtn)
+    const accounts = useStore.getState().inputs.accounts
+    expect(accounts.length).toBe(1)
+    expect(accounts[0].contributionEndAge).toBe(67)
+    expect(accounts[0].withdrawalStartAge).toBe(67)
+  })
+
   it('clicking an account card sets it active', () => {
     const { container } = render(<AccountsStep />)
     const roth = screen.getByText('Roth IRA').closest('[role="button"]') as HTMLElement

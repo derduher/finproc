@@ -38,10 +38,11 @@ describe('PersonStep — design copy', () => {
 })
 
 describe('PersonStep — fields', () => {
-  it('renders all six fields', () => {
+  it('renders all seven fields (incl. retirement age)', () => {
     render(<PersonStep />)
     // Use IDs to target the inputs specifically and avoid matching tooltips
     expect(document.getElementById('current-age')).not.toBeNull()
+    expect(document.getElementById('retirement-age')).not.toBeNull()
     expect(document.getElementById('planning-to-age')).not.toBeNull()
     expect(document.getElementById('annual-salary')).not.toBeNull()
     expect(document.getElementById('salary-growth')).not.toBeNull()
@@ -54,6 +55,13 @@ describe('PersonStep — fields', () => {
     const input = screen.getByLabelText(/current age/i) as HTMLInputElement
     fireEvent.change(input, { target: { value: '45' } })
     expect(useStore.getState().inputs.person.currentAge).toBe(45)
+  })
+
+  it('retirement age input updates the store', () => {
+    render(<PersonStep />)
+    const input = screen.getByLabelText(/retirement age/i) as HTMLInputElement
+    fireEvent.change(input, { target: { value: '60' } })
+    expect(useStore.getState().inputs.person.retirementAge).toBe(60)
   })
 })
 

@@ -42,6 +42,20 @@ describe('PipeEditor — balance input', () => {
   })
 })
 
+describe('PipeEditor — withdrawal-age label semantics', () => {
+  it('uses the legal-eligibility label for traditional accounts', () => {
+    render(<PipeEditor account={makeAccount({ type: 'traditional' })} annualSalary={120_000} onChange={vi.fn()} onDelete={() => {}} />)
+    expect(screen.getByText(/withdrawals eligible at age/i)).toBeInTheDocument()
+  })
+
+  it('uses a plan-sequencing label for taxable accounts (no IRS rule applies)', () => {
+    const { container } = render(<PipeEditor account={makeAccount({ type: 'taxable', costBasis: 10000 })} annualSalary={120_000} onChange={vi.fn()} onDelete={() => {}} />)
+    // Taxable accounts have no IRS age restriction; label should reflect that.
+    expect(container.textContent).not.toMatch(/withdrawals eligible at age/i)
+    expect(container.textContent).toMatch(/plan.draw age|first.tap age|when.*draw.*from/i)
+  })
+})
+
 describe('PipeEditor — costBasis input (taxable only)', () => {
   it('shows costBasis input when account type is taxable', () => {
     const onChange = vi.fn()

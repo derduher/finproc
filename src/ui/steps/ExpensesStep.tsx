@@ -237,8 +237,7 @@ export function ExpensesStep() {
   const patchInputs = useStore((s) => s.patchInputs)
 
   const ss = inputs.socialSecurity
-  const accounts = inputs.accounts
-  const retireAge = accounts.length > 0 ? Math.max(...accounts.map((a) => a.contributionEndAge)) : inputs.person.currentAge
+  const retireAge = inputs.person.retirementAge
 
   const updateSS = (patch: Partial<SocialSecurity>) => {
     patchInputs({

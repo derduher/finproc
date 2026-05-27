@@ -49,6 +49,20 @@ export function PersonStep() {
           </Field>
 
           <Field
+            label="Retirement age"
+            hint="When salary stops, withdrawals begin"
+            tooltip="Drives the retire marker on charts and the default contribution-stop / withdrawal-start age on new accounts. Per-account overrides still apply."
+          >
+            <NumInput
+              id="retirement-age"
+              type="number" min={person.currentAge} max={person.maxAge}
+              value={person.retirementAge}
+              aria-label="Retirement age"
+              onChange={(e) => patchPerson({ retirementAge: Number(e.target.value) })}
+            />
+          </Field>
+
+          <Field
             label="Annual salary"
             hint="Before tax, current dollars"
             tooltip="Used to compute payroll contributions. Set to 0 if already retired."

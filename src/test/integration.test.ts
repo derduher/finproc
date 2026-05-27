@@ -112,6 +112,7 @@ describe('cache — key determinism', () => {
       person: {
         maxAge: a.person.maxAge,
         currentAge: a.person.currentAge,
+        retirementAge: a.person.retirementAge,
         annualSalary: a.person.annualSalary,
         salaryGrowthRate: a.person.salaryGrowthRate,
         marginalTaxRate: a.person.marginalTaxRate,

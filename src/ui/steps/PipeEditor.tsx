@@ -360,7 +360,9 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
           </div>
 
           <div>
-            <div className="label" style={{ marginBottom: 6 }}>withdrawals eligible at age</div>
+            <div className="label" style={{ marginBottom: 6 }}>
+              {account.type === 'taxable' ? 'plan-draw age' : 'withdrawals eligible at age'}
+            </div>
             <input
               type="number"
               className="field field-num"
@@ -368,6 +370,13 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
               value={account.withdrawalStartAge}
               onChange={(e) => onChange({ withdrawalStartAge: Number(e.target.value) })}
             />
+            <div className="micro" style={{ marginTop: 4 }}>
+              {account.type === 'taxable'
+                ? 'Taxable accounts have no IRS age restriction — this is just when your plan starts drawing from this bucket.'
+                : account.type === 'traditional'
+                  ? 'IRS rule of thumb: 59½ for IRA, age 55+ separation for 401(k). 10% penalty for earlier withdrawals.'
+                  : 'Roth contributions are always available; gains have a 59½ rule. Penalty for early gain withdrawals.'}
+            </div>
           </div>
         </div>
       </div>
