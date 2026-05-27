@@ -57,6 +57,75 @@ describe('SimAccount — monthly growth', () => {
   })
 })
 
+describe('SimAccount — contribute max (IRS limit)', () => {
+  it('with contributeMax=true and accountSubtype="401k", monthly contribution is 401k limit / 12', () => {
+    const acc = new SimAccount(
+      makeAccount({
+        type: 'traditional',
+        accountSubtype: '401k',
+        contributeMax: true,
+        contributionAmount: 50, // should be ignored
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+      }),
+      0,
+    )
+    acc.contribute(40, 100000)
+    // 2026 401k limit = $24,500 → $2041.67/mo
+    expect(acc.getBalance()).toBeCloseTo(24500 / 12, 2)
+  })
+
+  it('with contributeMax=true and accountSubtype="ira", monthly contribution is IRA limit / 12', () => {
+    const acc = new SimAccount(
+      makeAccount({
+        type: 'traditional',
+        accountSubtype: 'ira',
+        contributeMax: true,
+        contributionAmount: 50,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+      }),
+      0,
+    )
+    acc.contribute(40, 100000)
+    // 2026 IRA limit = $7,500 → $625/mo
+    expect(acc.getBalance()).toBeCloseTo(7500 / 12, 2)
+  })
+
+  it('with contributeMax=true but subtype undefined → falls back to flat contribution', () => {
+    const acc = new SimAccount(
+      makeAccount({
+        type: 'traditional',
+        contributeMax: true,
+        // no accountSubtype
+        contributionAmount: 250,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+      }),
+      0,
+    )
+    acc.contribute(40, 100000)
+    expect(acc.getBalance()).toBeCloseTo(250, 2)
+  })
+
+  it('contributeMax respects contributionEndAge', () => {
+    const acc = new SimAccount(
+      makeAccount({
+        type: 'traditional',
+        accountSubtype: '401k',
+        contributeMax: true,
+        contributionAmount: 0,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+        contributionEndAge: 62,
+      }),
+      0,
+    )
+    acc.contribute(65, 100000) // past contributionEndAge
+    expect(acc.getBalance()).toBe(0)
+  })
+})
+
 describe('SimAccount — contributions', () => {
   it('flat monthly contribution: balance = initial + contrib × months (no growth)', () => {
     const acc = new SimAccount(

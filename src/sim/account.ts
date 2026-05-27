@@ -1,4 +1,5 @@
 import type { Account } from '../schema'
+import { irsContributionLimit } from './irsLimits'
 
 // Contribution frequency multipliers: how many "units" per month
 const FREQ_MULTIPLIER: Record<Account['contributionFrequency'], number> = {
@@ -148,7 +149,16 @@ export class SimAccount {
   }
 
   private monthlyContributionAmount(annualSalary: number): number {
-    const { contributionAmount, contributionType, contributionFrequency } = this.def
+    const { contributionAmount, contributionType, contributionFrequency, contributeMax, accountSubtype } = this.def
+
+    // contributeMax: derive from IRS limit for the subtype. Only meaningful
+    // when accountSubtype is '401k' or 'ira'. Falls through to the user-
+    // entered amount if no subtype is set.
+    if (contributeMax) {
+      const annualLimit = irsContributionLimit(accountSubtype)
+      if (annualLimit > 0) return annualLimit / 12
+    }
+
     const multiplier = FREQ_MULTIPLIER[contributionFrequency]
 
     if (contributionType === 'percent') {

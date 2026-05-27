@@ -8,7 +8,9 @@
  * On narrow viewports the columns stack via media query in the consumer.
  */
 import { Seg } from '../shared/Field'
+import { MoneyInput } from '../shared/MoneyInput'
 import type { Account } from '../../schema'
+import { irsContributionLimit } from '../../sim/irsLimits'
 
 interface Props {
   account: Account
@@ -18,6 +20,10 @@ interface Props {
 }
 
 function monthlyContrib(acc: Account, annualSalary: number): number {
+  if (acc.contributeMax) {
+    const annual = irsContributionLimit(acc.accountSubtype)
+    if (annual > 0) return annual / 12
+  }
   if (acc.contributionType === 'percent') {
     return (acc.contributionAmount * annualSalary) / 12
   }
@@ -162,15 +168,13 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
             <label htmlFor={`balance-${account.id}`} className="label" style={{ display: 'block', marginBottom: 6 }}>
               current balance
             </label>
-            <input
+            <MoneyInput
               id={`balance-${account.id}`}
-              type="number"
               className="field field-num"
               style={{ width: 160 }}
               value={account.balance}
               step={1000}
-              min={0}
-              onChange={(e) => onChange({ balance: Number(e.target.value) })}
+              onChange={(n) => onChange({ balance: n })}
             />
           </div>
 
@@ -179,18 +183,35 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
               <label htmlFor={`cost-basis-${account.id}`} className="label" style={{ display: 'block', marginBottom: 6 }}>
                 cost basis
               </label>
-              <input
+              <MoneyInput
                 id={`cost-basis-${account.id}`}
-                type="number"
                 className="field field-num"
                 style={{ width: 160 }}
                 value={account.costBasis ?? 0}
                 step={1000}
-                min={0}
-                onChange={(e) => onChange({ costBasis: Number(e.target.value) })}
+                onChange={(n) => onChange({ costBasis: n })}
               />
               <div className="micro" style={{ marginTop: 4 }}>
                 After-tax money already paid into this account. Withdrawals up to this amount aren&apos;t taxed again.
+              </div>
+            </div>
+          )}
+
+          {account.type !== 'taxable' && (
+            <div>
+              <div className="label" style={{ marginBottom: 6 }}>account subtype</div>
+              <Seg
+                aria-label="Account subtype"
+                value={account.accountSubtype ?? 'other'}
+                onChange={(v) => onChange({ accountSubtype: v as Account['accountSubtype'] })}
+                options={[
+                  { value: '401k', label: '401k' },
+                  { value: 'ira', label: 'IRA' },
+                  { value: 'other', label: 'other' },
+                ]}
+              />
+              <div className="micro" style={{ marginTop: 4 }}>
+                Drives the IRS contribution limit used by the “contribute the max” option.
               </div>
             </div>
           )}
@@ -211,6 +232,7 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
                 type="number"
                 className="field field-num"
                 style={{ width: 90 }}
+                disabled={account.contributeMax === true}
                 value={account.contributionType === 'percent' ? account.contributionAmount * 100 : account.contributionAmount}
                 step={account.contributionType === 'percent' ? 0.5 : 50}
                 onChange={(e) => {
@@ -232,6 +254,22 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
                 ]}
               />
             </div>
+            {(account.accountSubtype === '401k' || account.accountSubtype === 'ira') && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: 'var(--ink-2)' }}>
+                <input
+                  type="checkbox"
+                  aria-label="Contribute the max allowed"
+                  checked={account.contributeMax === true}
+                  onChange={(e) => onChange({ contributeMax: e.target.checked })}
+                />
+                contribute the max allowed
+                {account.contributeMax && (
+                  <span className="num" style={{ color: 'var(--ink-3)' }}>
+                    · ${irsContributionLimit(account.accountSubtype).toLocaleString()} / yr (2026 IRS limit)
+                  </span>
+                )}
+              </label>
+            )}
             <div className="micro" style={{ marginTop: 6 }}>
               ≈ {fmtUsd(monthly)} / month. Stops at age <span className="num">{account.contributionEndAge}</span>.
             </div>
@@ -319,19 +357,16 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
                     </>
                   ) : (
                     <label htmlFor={`match-flat-${account.id}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--ink-3)' }}>
-                      <input
+                      <MoneyInput
                         id={`match-flat-${account.id}`}
                         aria-label="Annual match amount"
-                        type="number"
                         className="field field-num"
                         style={{ width: 100 }}
                         value={account.employerMatch.annualAmount}
-                        step={500}
-                        min={0}
-                        onChange={(e) => {
+                        onChange={(n) => {
                           const m = account.employerMatch
                           if (m && m.type === 'flat') {
-                            onChange({ employerMatch: { ...m, annualAmount: Number(e.target.value) } })
+                            onChange({ employerMatch: { ...m, annualAmount: n } })
                           }
                         }}
                       />

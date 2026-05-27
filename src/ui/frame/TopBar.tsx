@@ -52,6 +52,7 @@ export function TopBar() {
 
   const [helpOpen, setHelpOpen] = useState(false)
   const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
   const chipRef = useRef<HTMLDivElement>(null)
 
   // Close the scenario menu when clicking outside it.
@@ -196,9 +197,11 @@ export function TopBar() {
         className="btn btn-sm"
         onClick={() => {
           navigator.clipboard?.writeText(window.location.href)
+          setShareCopied(true)
+          setTimeout(() => setShareCopied(false), 1800)
         }}
       >
-        Share
+        {shareCopied ? 'Copied!' : 'Share'}
       </button>
 
       <button
@@ -263,23 +266,6 @@ export function TopBar() {
         </div>
       )}
 
-      <div
-        aria-label="User"
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: 999,
-          background: 'var(--accent-soft)',
-          color: 'var(--accent-ink)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontWeight: 600,
-          fontSize: 12,
-        }}
-      >
-        ZK
-      </div>
     </div>
   )
 }

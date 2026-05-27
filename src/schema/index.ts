@@ -86,6 +86,18 @@ export const AccountSchema = z.object({
   withdrawalStartAge: z.number().int().min(0).max(130),
   /** Only for traditional accounts */
   employerMatch: EmployerMatchSchema.optional(),
+  /**
+   * Refines the account `type` for IRS-limit purposes. Only meaningful when
+   * type is 'traditional' or 'roth'; taxable accounts have no IRS cap.
+   * Optional for back-compat with URLs that predate this field.
+   */
+  accountSubtype: z.enum(['401k', 'ira', 'other']).optional(),
+  /**
+   * When true, the simulation ignores `contributionAmount` and uses the
+   * annual IRS limit for `accountSubtype` (divided by 12, monthly).
+   * Only effective when accountSubtype is '401k' or 'ira'.
+   */
+  contributeMax: z.boolean().optional(),
 })
 
 export type Account = z.infer<typeof AccountSchema>

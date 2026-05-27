@@ -9,6 +9,45 @@ import {
   defaultInputs,
 } from './index'
 
+describe('AccountSchema — accountSubtype + contributeMax', () => {
+  const base = {
+    id: 'a1',
+    name: 'My 401k',
+    type: 'traditional' as const,
+    balance: 100000,
+    contributionAmount: 1000,
+    contributionType: 'flat' as const,
+    contributionFrequency: 'monthly' as const,
+    contributionEndAge: 62,
+    withdrawalStartAge: 59,
+  }
+
+  it('accepts account with accountSubtype="401k" and contributeMax=true', () => {
+    const r = AccountSchema.safeParse({ ...base, accountSubtype: '401k', contributeMax: true })
+    expect(r.success).toBe(true)
+  })
+
+  it('accepts account with accountSubtype="ira"', () => {
+    const r = AccountSchema.safeParse({ ...base, accountSubtype: 'ira' })
+    expect(r.success).toBe(true)
+  })
+
+  it('accepts account with accountSubtype="other"', () => {
+    const r = AccountSchema.safeParse({ ...base, accountSubtype: 'other' })
+    expect(r.success).toBe(true)
+  })
+
+  it('accepts account without these new optional fields (back-compat)', () => {
+    const r = AccountSchema.safeParse(base)
+    expect(r.success).toBe(true)
+  })
+
+  it('rejects an unknown accountSubtype value', () => {
+    const r = AccountSchema.safeParse({ ...base, accountSubtype: 'roth-ira' })
+    expect(r.success).toBe(false)
+  })
+})
+
 describe('PersonSchema', () => {
   it('accepts valid person', () => {
     const result = PersonSchema.safeParse({

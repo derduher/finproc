@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSimulation } from '../../hooks/useSimulation'
 import { useScenarios } from '../../hooks/useScenarios'
 import { runSensitivity } from '../../sim/sensitivity'
@@ -20,7 +21,10 @@ export function ResultsStep() {
   const displayMode = useStore((s) => s.ui.displayMode)
   const setActiveStep = useStore((s) => s.setActiveStep)
   const { result: rawResult, loading, stale, progress } = useSimulation(inputs)
-  const { saveScenario } = useScenarios()
+  const { scenarios, saveScenario } = useScenarios()
+  const [shareCopied, setShareCopied] = useState(false)
+  const [jsonCopied, setJsonCopied] = useState(false)
+  const [branchSaved, setBranchSaved] = useState(false)
 
   if (loading || !rawResult) {
     return (
@@ -293,6 +297,11 @@ export function ResultsStep() {
             </div>
           </div>
           <HiTornado data={sensitivity} width={400} />
+          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 10, lineHeight: 1.5 }}>
+            How to read: each lever was moved <span className="num">±20%</span> from your baseline.
+            Bars to the right mean success rate goes up; bars to the left mean success rate goes
+            down. The top row has the largest impact.
+          </div>
         </div>
       </div>
 
@@ -357,30 +366,50 @@ export function ResultsStep() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {branchSaved && (
+            <span
+              role="status"
+              style={{ fontSize: 12, color: 'var(--good)' }}
+            >
+              Scenario saved
+            </span>
+          )}
           <button
             type="button"
             className="btn btn-sm"
+            aria-label="Copy as JSON"
             onClick={() => {
               const json = JSON.stringify(inputs, null, 2)
               navigator.clipboard?.writeText(json).catch(() => {})
+              setJsonCopied(true)
+              setTimeout(() => setJsonCopied(false), 1800)
             }}
           >
-            Copy as JSON
+            {jsonCopied ? 'Copied!' : 'Copy as JSON'}
           </button>
           <button
             type="button"
             className="btn btn-sm"
+            aria-label="Share link"
             onClick={() => {
               navigator.clipboard?.writeText(window.location.href).catch(() => {})
+              setShareCopied(true)
+              setTimeout(() => setShareCopied(false), 1800)
             }}
           >
-            Share link
+            {shareCopied ? 'Copied!' : 'Share link'}
           </button>
           <button
             type="button"
             className="btn btn-sm btn-primary"
-            onClick={() => saveScenario(inputs.scenarioName + ' (branch)', inputs)}
+            disabled={scenarios.length >= 4}
+            title={scenarios.length >= 4 ? 'Scenario limit reached (4). Delete one to add more.' : undefined}
+            onClick={() => {
+              saveScenario(inputs.scenarioName + ' (branch)', inputs)
+              setBranchSaved(true)
+              setTimeout(() => setBranchSaved(false), 2200)
+            }}
           >
             ＋ Branch scenario
           </button>

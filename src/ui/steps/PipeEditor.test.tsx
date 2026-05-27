@@ -24,21 +24,39 @@ function makeAccount(overrides: Partial<Account> = {}): Account {
   }
 }
 
+function readMoney(input: HTMLInputElement): number {
+  return Number(input.value.replace(/,/g, '')) || 0
+}
+
 describe('PipeEditor — balance input', () => {
   it('renders a balance input with the current account balance', () => {
     const onChange = vi.fn()
     render(<PipeEditor account={makeAccount()} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
     const input = screen.getByLabelText(/current balance/i) as HTMLInputElement
     expect(input).toBeTruthy()
-    expect(Number(input.value)).toBe(150_000)
+    expect(readMoney(input)).toBe(150_000)
+  })
+
+  it('formats balance with locale separators (1,000-style)', () => {
+    render(<PipeEditor account={makeAccount({ balance: 150_000 })} annualSalary={120_000} onChange={vi.fn()} onDelete={() => {}} />)
+    const input = screen.getByLabelText(/current balance/i) as HTMLInputElement
+    expect(input.value).toBe('150,000')
   })
 
   it('typing in the balance input calls onChange with the new balance', () => {
     const onChange = vi.fn()
     render(<PipeEditor account={makeAccount()} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
     const input = screen.getByLabelText(/current balance/i) as HTMLInputElement
-    fireEvent.change(input, { target: { value: '200000' } })
+    fireEvent.change(input, { target: { value: '200,000' } })
     expect(onChange).toHaveBeenCalledWith({ balance: 200_000 })
+  })
+
+  it('snaps balance to nearest 1000 on blur', () => {
+    const onChange = vi.fn()
+    render(<PipeEditor account={makeAccount({ balance: 12345 })} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
+    const input = screen.getByLabelText(/current balance/i) as HTMLInputElement
+    fireEvent.blur(input)
+    expect(onChange).toHaveBeenCalledWith({ balance: 12000 })
   })
 })
 
@@ -63,7 +81,7 @@ describe('PipeEditor — costBasis input (taxable only)', () => {
     render(<PipeEditor account={acc} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
     const input = screen.getByLabelText(/cost basis/i) as HTMLInputElement
     expect(input).toBeTruthy()
-    expect(Number(input.value)).toBe(88_000)
+    expect(readMoney(input)).toBe(88_000)
   })
 
   it('hides costBasis input for non-taxable accounts', () => {
@@ -77,7 +95,7 @@ describe('PipeEditor — costBasis input (taxable only)', () => {
     const acc = makeAccount({ type: 'taxable', costBasis: 50_000 })
     render(<PipeEditor account={acc} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
     const input = screen.getByLabelText(/cost basis/i) as HTMLInputElement
-    fireEvent.change(input, { target: { value: '60000' } })
+    fireEvent.change(input, { target: { value: '60,000' } })
     expect(onChange).toHaveBeenCalledWith({ costBasis: 60_000 })
   })
 })
@@ -135,7 +153,7 @@ describe('PipeEditor — employerMatch inputs (traditional only)', () => {
     })
     render(<PipeEditor account={acc} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
     const input = screen.getByLabelText(/annual match amount/i) as HTMLInputElement
-    expect(Number(input.value)).toBe(6000)
+    expect(readMoney(input)).toBe(6000)
   })
 
   it('toggling match-on adds a default percent match', () => {
@@ -162,4 +180,94 @@ describe('PipeEditor — employerMatch inputs (traditional only)', () => {
     fireEvent.click(toggle)
     expect(onChange).toHaveBeenCalledWith({ employerMatch: undefined })
   })
+})
+
+describe('PipeEditor — account subtype + max contribution', () => {
+  it('renders a subtype selector (401k / IRA / other) for traditional accounts', () => {
+    render(<PipeEditor account={makeAccount({ type: 'traditional' })} annualSalary={120_000} onChange={vi.fn()} onDelete={() => {}} />)
+    expect(screen.getByRole('radio', { name: /401k/i })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /ira/i })).toBeInTheDocument()
+  })
+
+  it('hides the subtype selector for taxable accounts', () => {
+    render(<PipeEditor account={makeAccount({ type: 'taxable', costBasis: 10000 })} annualSalary={120_000} onChange={vi.fn()} onDelete={() => {}} />)
+    expect(screen.queryByRole('radio', { name: /^401k$/i })).toBeNull()
+  })
+
+  it('selecting a subtype calls onChange with accountSubtype', () => {
+    const onChange = vi.fn()
+    render(<PipeEditor account={makeAccount({ type: 'traditional' })} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
+    fireEvent.click(screen.getByRole('radio', { name: /401k/i }))
+    expect(onChange).toHaveBeenCalledWith({ accountSubtype: '401k' })
+  })
+
+  it('renders a "contribute the max" checkbox when subtype is 401k or ira', () => {
+    render(
+      <PipeEditor
+        account={makeAccount({ type: 'traditional', accountSubtype: '401k' })}
+        annualSalary={120_000}
+        onChange={vi.fn()}
+        onDelete={() => {}}
+      />,
+    )
+    expect(screen.getByLabelText(/contribute the max/i)).toBeInTheDocument()
+  })
+
+  it('does not render the max checkbox when subtype is "other" or unset', () => {
+    render(
+      <PipeEditor
+        account={makeAccount({ type: 'traditional' })}
+        annualSalary={120_000}
+        onChange={vi.fn()}
+        onDelete={() => {}}
+      />,
+    )
+    expect(screen.queryByLabelText(/contribute the max/i)).toBeNull()
+  })
+
+  it('toggling the max checkbox calls onChange with contributeMax=true', () => {
+    const onChange = vi.fn()
+    render(
+      <PipeEditor
+        account={makeAccount({ type: 'traditional', accountSubtype: '401k' })}
+        annualSalary={120_000}
+        onChange={onChange}
+        onDelete={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByLabelText(/contribute the max/i))
+    expect(onChange).toHaveBeenCalledWith({ contributeMax: true })
+  })
+
+  it('when contributeMax is true, the amount input is disabled', () => {
+    render(
+      <PipeEditor
+        account={makeAccount({ type: 'traditional', accountSubtype: '401k', contributeMax: true })}
+        annualSalary={120_000}
+        onChange={vi.fn()}
+        onDelete={() => {}}
+      />,
+    )
+    // The contribution amount input lives in the contributions section; it should be disabled
+    const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[]
+    const amtInput = inputs.find((i) => Number(i.value) === 2000 || Number(i.value) === 50)
+    // Simply check disabled state on numeric input(s) inside the contributions area
+    const disabledNumberInputs = inputs.filter((i) => i.disabled)
+    expect(disabledNumberInputs.length).toBeGreaterThan(0)
+    void amtInput
+  })
+
+  it('shows a tiny "max" annotation explaining the limit', () => {
+    const { container } = render(
+      <PipeEditor
+        account={makeAccount({ type: 'traditional', accountSubtype: '401k', contributeMax: true })}
+        annualSalary={120_000}
+        onChange={vi.fn()}
+        onDelete={() => {}}
+      />,
+    )
+    // Should reference the IRS limit in some way
+    expect(container.textContent).toMatch(/\$24,500|IRS|annual limit/i)
+  })
+
 })
