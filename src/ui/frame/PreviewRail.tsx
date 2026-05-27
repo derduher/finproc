@@ -18,7 +18,9 @@ export function PreviewRail() {
   // Apply nominal/real deflation so the mini-fan + metrics match the top-bar toggle.
   const result = rawResult ? deflateResult(rawResult, displayMode, inputs) : null
 
-  const successPct = result ? Math.round(result.successRate * 100) : null
+  const successPct = result && Number.isFinite(result.successRate)
+    ? Math.round(result.successRate * 100)
+    : null
   const depleted = result?.medianDepleteAge !== undefined
 
   return (

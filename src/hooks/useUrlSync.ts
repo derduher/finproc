@@ -16,6 +16,12 @@ export interface UrlSyncResult {
   initialInputs: SimulationInputs | null
   initialUiPrefs: UiPrefs | null
   /**
+   * True when the URL had an `?s=` param but it failed to decode/validate.
+   * The app uses this to show a non-blocking "couldn't load shared scenario"
+   * banner; it's false when there was no param at all (fresh visit).
+   */
+  inputsParseFailed: boolean
+  /**
    * Debounce-write the inputs (and optional UI prefs) to the URL.
    * `onCommit` fires once after the debounced write actually lands —
    * use it to record "auto-saved Ns ago" in the store.
@@ -37,10 +43,20 @@ function readParam(name: string): string | null {
 }
 
 export function useUrlSync(): UrlSyncResult {
-  const [initialInputs] = useState<SimulationInputs | null>(() => {
+  // Capture the raw param presence + the parse result in a single mount-time
+  // snapshot. If `?s=` was present but decode failed, callers can surface a
+  // "couldn't load shared scenario" banner.
+  const [initial] = useState<{
+    inputs: SimulationInputs | null
+    inputsParseFailed: boolean
+  }>(() => {
     const encoded = readParam(URL_PARAM_INPUTS)
-    return encoded ? decompressInputs(encoded) : null
+    if (!encoded) return { inputs: null, inputsParseFailed: false }
+    const decoded = decompressInputs(encoded)
+    return { inputs: decoded, inputsParseFailed: decoded === null }
   })
+  const initialInputs = initial.inputs
+  const inputsParseFailed = initial.inputsParseFailed
 
   const [initialUiPrefs] = useState<UiPrefs | null>(() => {
     const encoded = readParam(URL_PARAM_UI)
@@ -70,5 +86,5 @@ export function useUrlSync(): UrlSyncResult {
     [],
   )
 
-  return { initialInputs, initialUiPrefs, syncToUrl }
+  return { initialInputs, initialUiPrefs, inputsParseFailed, syncToUrl }
 }

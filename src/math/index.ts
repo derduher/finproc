@@ -192,6 +192,7 @@ export function traditionalWithdrawalGrossUp(netNeeded: number, marginalRate: nu
  * - ≥ $1,000,000,000  → "$X.XB" (one decimal)
  */
 export function formatMoneyAbbreviated(value: number): string {
+  if (!Number.isFinite(value)) return '—'
   const abs = Math.abs(value)
   if (abs >= 1e9) return `$${(value / 1e9).toFixed(1)}B`
   if (abs >= 1e6) return `$${(value / 1e6).toFixed(1)}M`

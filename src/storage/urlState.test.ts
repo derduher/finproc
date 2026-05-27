@@ -39,6 +39,31 @@ describe('urlState — round-trip', () => {
   })
 })
 
+describe('urlState — base64 fallback', () => {
+  it('decompresses payload produced by compressToBase64 (fallback path)', async () => {
+    const { compressToBase64 } = await import('lz-string')
+    const inp = { ...defaultInputs(), scenarioName: 'From base64' }
+    const encoded = compressToBase64(JSON.stringify(inp))
+    const decoded = decompressInputs(encoded)
+    expect(decoded?.scenarioName).toBe('From base64')
+  })
+
+  it('still prefers EncodedURIComponent decode when payload is encoded that way', () => {
+    const inp = { ...defaultInputs(), scenarioName: 'From uri-safe' }
+    const encoded = compressInputs(inp)
+    const decoded = decompressInputs(encoded)
+    expect(decoded?.scenarioName).toBe('From uri-safe')
+  })
+
+  it('decompressUiPrefs decompresses payload produced by compressToBase64', async () => {
+    const { compressToBase64 } = await import('lz-string')
+    const { decompressUiPrefs } = await import('./urlState')
+    const prefs = { aesthetic: 'mono' as const, theme: 'dark' as const, density: 'compact' as const }
+    const encoded = compressToBase64(JSON.stringify(prefs))
+    expect(decompressUiPrefs(encoded)).toEqual(prefs)
+  })
+})
+
 describe('urlState — UI prefs round-trip', () => {
   it('compressUiPrefs / decompressUiPrefs round-trips aesthetic/theme/density', async () => {
     const { compressUiPrefs, decompressUiPrefs } = await import('./urlState')

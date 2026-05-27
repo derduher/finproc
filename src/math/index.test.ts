@@ -223,6 +223,15 @@ describe('formatMoneyAbbreviated', () => {
   it('>= $1B → B suffix with one decimal', () => {
     expect(formatMoneyAbbreviated(1500000000)).toBe('$1.5B')
   })
+
+  it('returns em-dash for NaN', () => {
+    expect(formatMoneyAbbreviated(NaN)).toBe('—')
+  })
+
+  it('returns em-dash for Infinity / -Infinity', () => {
+    expect(formatMoneyAbbreviated(Infinity)).toBe('—')
+    expect(formatMoneyAbbreviated(-Infinity)).toBe('—')
+  })
 })
 
 describe('p10p90ToSigma', () => {

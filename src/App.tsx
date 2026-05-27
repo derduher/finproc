@@ -1,6 +1,7 @@
 // Threadwell — retirement plot
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Frame } from './ui/frame/Frame'
+import { UrlParseFailedBanner } from './ui/frame/UrlParseFailedBanner'
 import { PersonStep } from './ui/steps/PersonStep'
 import { AccountsStep } from './ui/steps/AccountsStep'
 import { MarketsStep } from './ui/steps/MarketsStep'
@@ -30,7 +31,8 @@ export default function App() {
   const setTheme = useStore((s) => s.setTheme)
   const setDensity = useStore((s) => s.setDensity)
   const setLastCommittedAt = useStore((s) => s.setLastCommittedAt)
-  const { initialInputs, initialUiPrefs, syncToUrl } = useUrlSync()
+  const { initialInputs, initialUiPrefs, inputsParseFailed, syncToUrl } = useUrlSync()
+  const [bannerDismissed, setBannerDismissed] = useState(false)
 
   // Restore inputs + UI prefs from URL on first load. initialInputs/initialUiPrefs
   // are derived once at mount and never change; setters are stable Zustand actions.
@@ -60,8 +62,14 @@ export default function App() {
   // both chromes live in the DOM and the browser picks the right one at the
   // 768px breakpoint. No JS resize listener, no remount on rotation.
   return (
-    <Frame wide={isResults}>
-      <StepComponent />
-    </Frame>
+    <>
+      <UrlParseFailedBanner
+        visible={inputsParseFailed && !bannerDismissed}
+        onDismiss={() => setBannerDismissed(true)}
+      />
+      <Frame wide={isResults}>
+        <StepComponent />
+      </Frame>
+    </>
   )
 }

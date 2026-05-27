@@ -40,9 +40,10 @@ export function ResultsStep() {
   // Insights use the raw (nominal) result so insight numerics aren't mode-dependent.
   const insights = computeInsights(inputs, rawResult, { runCount: 100 })
 
-  const successPct = Math.round(result.successRate * 100)
-  const isGood = result.successRate >= 0.8
-  const isWarn = result.successRate >= 0.5 && result.successRate < 0.8
+  const successRateValid = Number.isFinite(result.successRate)
+  const successPct = successRateValid ? Math.round(result.successRate * 100) : null
+  const isGood = successRateValid && result.successRate >= 0.8
+  const isWarn = successRateValid && result.successRate >= 0.5 && result.successRate < 0.8
   const successColor = isGood ? 'var(--good)' : isWarn ? 'var(--accent)' : 'var(--bad)'
 
   const accounts = inputs.accounts
@@ -92,7 +93,7 @@ export function ResultsStep() {
                 letterSpacing: '-0.02em',
               }}
             >
-              {successPct}
+              {successPct ?? '—'}
             </span>
             <span style={{ fontSize: 24, color: 'var(--ink-3)' }}>%</span>
           </div>
@@ -104,7 +105,7 @@ export function ResultsStep() {
             <div
               data-testid="success-bar"
               style={{
-                width: `${successPct}%`,
+                width: `${successPct ?? 0}%`,
                 height: '100%',
                 background: successColor,
                 borderRadius: 3,

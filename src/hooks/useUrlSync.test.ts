@@ -97,4 +97,31 @@ describe('useUrlSync', () => {
     const { result } = renderHook(() => useUrlSync())
     expect(result.current.initialUiPrefs).toEqual({ aesthetic: 'mono', theme: 'dark', density: 'compact' })
   })
+
+  it('inputsParseFailed is false when ?s= is absent', () => {
+    const { result } = renderHook(() => useUrlSync())
+    expect(result.current.inputsParseFailed).toBe(false)
+  })
+
+  it('inputsParseFailed is true when ?s= is present but unparseable', () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, search: '?s=not-a-real-payload' },
+      writable: true,
+    })
+    const { result } = renderHook(() => useUrlSync())
+    expect(result.current.inputsParseFailed).toBe(true)
+    expect(result.current.initialInputs).toBeNull()
+  })
+
+  it('inputsParseFailed is false when ?s= decodes successfully', async () => {
+    const { compressInputs } = await import('../storage/urlState')
+    const encoded = compressInputs(defaultInputs())
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, search: `?s=${encoded}` },
+      writable: true,
+    })
+    const { result } = renderHook(() => useUrlSync())
+    expect(result.current.inputsParseFailed).toBe(false)
+    expect(result.current.initialInputs).not.toBeNull()
+  })
 })
