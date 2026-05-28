@@ -48,6 +48,90 @@ describe('useStore — input mutations', () => {
   })
 })
 
+describe('useStore — retirement-age cascade', () => {
+  it('changing retirementAge updates contributionEndAge on all accounts to the new value', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => {
+      result.current.patchInputs({
+        accounts: [
+          {
+            id: 'a', name: 'Roth', type: 'roth',
+            balance: 100_000,
+            contributionAmount: 500,
+            contributionType: 'flat',
+            contributionFrequency: 'monthly',
+            contributionEndAge: 62,
+            withdrawalStartAge: 60,
+          },
+          {
+            id: 'b', name: 'Brokerage', type: 'taxable',
+            balance: 50_000,
+            contributionAmount: 200,
+            contributionType: 'flat',
+            contributionFrequency: 'monthly',
+            contributionEndAge: 62,
+            withdrawalStartAge: 62,
+          },
+        ],
+      })
+      result.current.patchPerson({ retirementAge: 55 })
+    })
+    expect(result.current.inputs.accounts[0].contributionEndAge).toBe(55)
+    expect(result.current.inputs.accounts[1].contributionEndAge).toBe(55)
+  })
+
+  it('changing retirementAge updates withdrawalStartAge on TAXABLE accounts only', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => {
+      result.current.patchInputs({
+        accounts: [
+          {
+            id: 'a', name: 'Roth', type: 'roth',
+            balance: 100_000,
+            contributionAmount: 500,
+            contributionType: 'flat',
+            contributionFrequency: 'monthly',
+            contributionEndAge: 62,
+            withdrawalStartAge: 59, // legal IRS rule — should NOT move
+          },
+          {
+            id: 'b', name: 'Brokerage', type: 'taxable',
+            balance: 50_000,
+            contributionAmount: 200,
+            contributionType: 'flat',
+            contributionFrequency: 'monthly',
+            contributionEndAge: 62,
+            withdrawalStartAge: 62,
+          },
+        ],
+      })
+      result.current.patchPerson({ retirementAge: 67 })
+    })
+    expect(result.current.inputs.accounts[0].withdrawalStartAge).toBe(59) // unchanged (IRS-bound)
+    expect(result.current.inputs.accounts[1].withdrawalStartAge).toBe(67) // tracks retirement
+  })
+
+  it('patchPerson without retirementAge change leaves accounts untouched', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => {
+      result.current.patchInputs({
+        accounts: [{
+          id: 'a', name: 'Roth', type: 'roth',
+          balance: 100_000,
+          contributionAmount: 500,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 62,
+          withdrawalStartAge: 59,
+        }],
+      })
+      result.current.patchPerson({ annualSalary: 120_000 })
+    })
+    expect(result.current.inputs.accounts[0].contributionEndAge).toBe(62)
+    expect(result.current.inputs.accounts[0].withdrawalStartAge).toBe(59)
+  })
+})
+
 describe('useStore — UI state', () => {
   it('setActiveStep updates the active step', () => {
     const { result } = renderHook(() => useStore())

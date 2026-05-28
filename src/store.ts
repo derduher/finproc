@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { defaultInputs } from './schema'
+import { withRetirementAge } from './sim/retirementAge'
 import type { SimulationInputs, Person } from './schema'
 
 export type DisplayMode = 'nominal' | 'real'
@@ -58,7 +59,15 @@ export const useStore = create<Store>((set) => ({
     set((s) => ({ inputs: { ...s.inputs, ...patch } })),
 
   patchPerson: (patch) =>
-    set((s) => ({ inputs: { ...s.inputs, person: { ...s.inputs.person, ...patch } } })),
+    set((s) => {
+      const person = { ...s.inputs.person, ...patch }
+      // When retirementAge changes, cascade it onto accounts (contributions stop
+      // at retirement; taxable accounts begin drawing then). See withRetirementAge.
+      if (patch.retirementAge !== undefined && patch.retirementAge !== s.inputs.person.retirementAge) {
+        return { inputs: withRetirementAge({ ...s.inputs, person }, patch.retirementAge) }
+      }
+      return { inputs: { ...s.inputs, person } }
+    }),
 
   setActiveStep: (activeStep) => set((s) => ({ ui: { ...s.ui, activeStep } })),
 

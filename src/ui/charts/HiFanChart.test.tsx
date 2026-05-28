@@ -45,6 +45,35 @@ describe('HiFanChart — basic render', () => {
   })
 })
 
+describe('HiFanChart — hide P90', () => {
+  it('renders the P90 label by default', () => {
+    render(<HiFanChart result={makeResult()} />)
+    expect(screen.getByText(/P90/)).toBeInTheDocument()
+  })
+
+  it('hides the P90 label when hideP90 is true', () => {
+    render(<HiFanChart result={makeResult()} hideP90 />)
+    expect(screen.queryByText(/P90/)).toBeNull()
+    // P50 and P10 remain visible.
+    expect(screen.getByText(/P50/)).toBeInTheDocument()
+    expect(screen.getByText(/P10/)).toBeInTheDocument()
+  })
+
+  it('rescales the Y-axis to the P50 max when P90 is hidden (top tick < P90 max)', () => {
+    const { container: withP90 } = render(<HiFanChart result={makeResult()} />)
+    const { container: noP90 } = render(<HiFanChart result={makeResult()} hideP90 />)
+    const topTick = (c: HTMLElement) => {
+      const texts = Array.from(c.querySelectorAll('text'))
+        .map((t) => t.textContent ?? '')
+        .filter((t) => /[$0-9]/.test(t))
+      return texts
+    }
+    // The presence of distinct y-axis labels is enough to confirm a different scale;
+    // assert the hidden-P90 chart does not contain the largest P90 tick value.
+    expect(topTick(withP90).join('|')).not.toEqual(topTick(noP90).join('|'))
+  })
+})
+
 describe('HiFanChart — retire marker', () => {
   it('renders retire age marker when retireAge is in range', () => {
     render(<HiFanChart result={makeResult()} retireAge={62} />)

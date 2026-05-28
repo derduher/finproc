@@ -74,29 +74,18 @@ describe('PipeEditor — withdrawal-age label semantics', () => {
   })
 })
 
-describe('PipeEditor — costBasis input (taxable only)', () => {
-  it('shows costBasis input when account type is taxable', () => {
-    const onChange = vi.fn()
-    const acc = makeAccount({ type: 'taxable', costBasis: 88_000 })
-    render(<PipeEditor account={acc} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
-    const input = screen.getByLabelText(/cost basis/i) as HTMLInputElement
-    expect(input).toBeTruthy()
-    expect(readMoney(input)).toBe(88_000)
-  })
-
-  it('hides costBasis input for non-taxable accounts', () => {
-    const onChange = vi.fn()
-    render(<PipeEditor account={makeAccount({ type: 'traditional' })} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
+describe('PipeEditor — no cost-basis input (taxable gains assumed LTCG)', () => {
+  it('does NOT render a cost-basis input for taxable accounts', () => {
+    // We no longer ask users for cost basis. Taxable gains are assumed to be
+    // sold at the long-term capital-gains rate, with basis defaulting to the
+    // current balance under the hood.
+    render(<PipeEditor account={makeAccount({ type: 'taxable' })} annualSalary={120_000} onChange={vi.fn()} onDelete={() => {}} />)
     expect(screen.queryByLabelText(/cost basis/i)).toBeNull()
   })
 
-  it('typing in costBasis calls onChange with the new value', () => {
-    const onChange = vi.fn()
-    const acc = makeAccount({ type: 'taxable', costBasis: 50_000 })
-    render(<PipeEditor account={acc} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
-    const input = screen.getByLabelText(/cost basis/i) as HTMLInputElement
-    fireEvent.change(input, { target: { value: '60,000' } })
-    expect(onChange).toHaveBeenCalledWith({ costBasis: 60_000 })
+  it('does NOT render a cost-basis input for non-taxable accounts', () => {
+    render(<PipeEditor account={makeAccount({ type: 'traditional' })} annualSalary={120_000} onChange={vi.fn()} onDelete={() => {}} />)
+    expect(screen.queryByLabelText(/cost basis/i)).toBeNull()
   })
 })
 
@@ -239,7 +228,7 @@ describe('PipeEditor — account subtype + max contribution', () => {
     expect(onChange).toHaveBeenCalledWith({ contributeMax: true })
   })
 
-  it('when contributeMax is true, the amount input is disabled', () => {
+  it('when contributeMax is true, the amount input is hidden (not just disabled)', () => {
     render(
       <PipeEditor
         account={makeAccount({ type: 'traditional', accountSubtype: '401k', contributeMax: true })}
@@ -248,13 +237,40 @@ describe('PipeEditor — account subtype + max contribution', () => {
         onDelete={() => {}}
       />,
     )
-    // The contribution amount input lives in the contributions section; it should be disabled
+    // No contribution-amount spinbutton with the original contribution value should remain.
     const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[]
-    const amtInput = inputs.find((i) => Number(i.value) === 2000 || Number(i.value) === 50)
-    // Simply check disabled state on numeric input(s) inside the contributions area
-    const disabledNumberInputs = inputs.filter((i) => i.disabled)
-    expect(disabledNumberInputs.length).toBeGreaterThan(0)
-    void amtInput
+    const amtInput = inputs.find((i) => Number(i.value) === 2000)
+    expect(amtInput).toBeUndefined()
+  })
+
+  it('hides the contribution amount + frequency selector when contributeMax is true', () => {
+    render(
+      <PipeEditor
+        account={makeAccount({ type: 'traditional', accountSubtype: '401k', contributeMax: true })}
+        annualSalary={120_000}
+        onChange={vi.fn()}
+        onDelete={() => {}}
+      />,
+    )
+    // The frequency segment (weekly/semi/monthly) should not be present.
+    expect(screen.queryByRole('radio', { name: /weekly/i })).toBeNull()
+    expect(screen.queryByRole('radio', { name: /semi/i })).toBeNull()
+    // The contribution type segment (flat $ / % salary) should not be present.
+    expect(screen.queryByRole('radio', { name: /flat \$/i })).toBeNull()
+    expect(screen.queryByRole('radio', { name: /% salary/i })).toBeNull()
+  })
+
+  it('shows contribution amount + frequency selector when contributeMax is false', () => {
+    render(
+      <PipeEditor
+        account={makeAccount({ type: 'traditional', accountSubtype: '401k', contributeMax: false })}
+        annualSalary={120_000}
+        onChange={vi.fn()}
+        onDelete={() => {}}
+      />,
+    )
+    expect(screen.getByRole('radio', { name: /weekly/i })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /flat \$/i })).toBeInTheDocument()
   })
 
   it('shows a tiny "max" annotation explaining the limit', () => {

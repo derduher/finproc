@@ -115,6 +115,24 @@ describe('MarketsStep — segment cards', () => {
   })
 })
 
+describe('MarketsStep — historical defaults preset', () => {
+  it('renders a "historical defaults" button', () => {
+    render(<MarketsStep />)
+    expect(screen.getByRole('button', { name: /historical defaults/i })).toBeInTheDocument()
+  })
+
+  it('clicking it applies the historical nominal return/inflation bands to the initial segment', () => {
+    render(<MarketsStep />)
+    fireEvent.click(screen.getByRole('button', { name: /historical defaults/i }))
+    const inputs = useStore.getState().inputs
+    // Nominal stock growth ~4.4%–13.5% (median ~9%), inflation ~-1.5%–8.75%.
+    expect(inputs.initialStockGrowthMin).toBeCloseTo(0.044, 4)
+    expect(inputs.initialStockGrowthMax).toBeCloseTo(0.135, 4)
+    expect(inputs.initialInflationMin).toBeCloseTo(-0.015, 4)
+    expect(inputs.initialInflationMax).toBeCloseTo(0.0875, 4)
+  })
+})
+
 describe('MarketsStep — simplifications note', () => {
   it('renders the Monte Carlo simplification note', () => {
     render(<MarketsStep />)

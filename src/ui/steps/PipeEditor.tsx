@@ -179,21 +179,8 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
           </div>
 
           {account.type === 'taxable' && (
-            <div>
-              <label htmlFor={`cost-basis-${account.id}`} className="label" style={{ display: 'block', marginBottom: 6 }}>
-                cost basis
-              </label>
-              <MoneyInput
-                id={`cost-basis-${account.id}`}
-                className="field field-num"
-                style={{ width: 160 }}
-                value={account.costBasis ?? 0}
-                step={1000}
-                onChange={(n) => onChange({ costBasis: n })}
-              />
-              <div className="micro" style={{ marginTop: 4 }}>
-                After-tax money already paid into this account. Withdrawals up to this amount aren&apos;t taxed again.
-              </div>
+            <div className="micro" style={{ color: 'var(--ink-3)' }}>
+              Taxable gains are assumed to be sold at the long-term capital-gains rate, so there&apos;s no cost basis to enter.
             </div>
           )}
 
@@ -218,42 +205,43 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
 
           <div>
             <div className="label" style={{ marginBottom: 6 }}>contributions</div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Seg
-                aria-label="Contribution type"
-                value={account.contributionType}
-                onChange={(v) => onChange({ contributionType: v as Account['contributionType'] })}
-                options={[
-                  { value: 'flat', label: 'flat $' },
-                  { value: 'percent', label: '% salary' },
-                ]}
-              />
-              <input
-                type="number"
-                className="field field-num"
-                style={{ width: 90 }}
-                disabled={account.contributeMax === true}
-                value={account.contributionType === 'percent' ? account.contributionAmount * 100 : account.contributionAmount}
-                step={account.contributionType === 'percent' ? 0.5 : 50}
-                onChange={(e) => {
-                  const n = Number(e.target.value)
-                  onChange({ contributionAmount: account.contributionType === 'percent' ? n / 100 : n })
-                }}
-              />
-              <span style={{ color: 'var(--ink-3)', fontSize: 12 }}>
-                {account.contributionType === 'percent' ? '%' : '/ period'}
-              </span>
-              <Seg
-                aria-label="Contribution frequency"
-                value={account.contributionFrequency}
-                onChange={(v) => onChange({ contributionFrequency: v as Account['contributionFrequency'] })}
-                options={[
-                  { value: 'weekly', label: 'weekly' },
-                  { value: 'semi-monthly', label: 'semi' },
-                  { value: 'monthly', label: 'monthly' },
-                ]}
-              />
-            </div>
+            {account.contributeMax !== true && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Seg
+                  aria-label="Contribution type"
+                  value={account.contributionType}
+                  onChange={(v) => onChange({ contributionType: v as Account['contributionType'] })}
+                  options={[
+                    { value: 'flat', label: 'flat $' },
+                    { value: 'percent', label: '% salary' },
+                  ]}
+                />
+                <input
+                  type="number"
+                  className="field field-num"
+                  style={{ width: 90 }}
+                  value={account.contributionType === 'percent' ? account.contributionAmount * 100 : account.contributionAmount}
+                  step={account.contributionType === 'percent' ? 0.5 : 50}
+                  onChange={(e) => {
+                    const n = Number(e.target.value)
+                    onChange({ contributionAmount: account.contributionType === 'percent' ? n / 100 : n })
+                  }}
+                />
+                <span style={{ color: 'var(--ink-3)', fontSize: 12 }}>
+                  {account.contributionType === 'percent' ? '%' : '/ period'}
+                </span>
+                <Seg
+                  aria-label="Contribution frequency"
+                  value={account.contributionFrequency}
+                  onChange={(v) => onChange({ contributionFrequency: v as Account['contributionFrequency'] })}
+                  options={[
+                    { value: 'weekly', label: 'weekly' },
+                    { value: 'semi-monthly', label: 'semi' },
+                    { value: 'monthly', label: 'monthly' },
+                  ]}
+                />
+              </div>
+            )}
             {(account.accountSubtype === '401k' || account.accountSubtype === 'ira') && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: 'var(--ink-2)' }}>
                 <input

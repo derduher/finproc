@@ -390,3 +390,100 @@ describe('runSingleProjection — breakpoints', () => {
     expect(highEnd).toBeGreaterThan(lowEnd)
   })
 })
+
+describe('runSingleProjection — pre-retirement one-time expense', () => {
+  it('lump-sum expense paid before withdrawalStartAge still draws from accounts', () => {
+    // Person at 51 with $1M Roth locked until 65, no salary. A $1M one-time
+    // expense lands at 51. The simulation must actually pay for it — silently
+    // ignoring the lockout was the bug.
+    const withExpense = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 51, maxAge: 70, annualSalary: 0, retirementAge: 65 },
+        accounts: [{
+          id: 'a', name: 'Roth', type: 'roth',
+          balance: 1_000_000,
+          contributionAmount: 0,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 65,
+          withdrawalStartAge: 65,
+        }],
+        annualExpenses: 0,
+        oneTimeExpenses: [{ id: 'e1', label: 'House', age: 51, amountPresentDollars: 800_000 }],
+      }),
+      ZERO_RATES,
+    )
+
+    // First-year ending balance after $800K expense should be ~$200K (not $1M).
+    const firstYearBalance = withExpense.yearlyResults[0]!.totalBalance
+    expect(firstYearBalance).toBeLessThan(300_000)
+  })
+
+  it('lump-sum reflected in withdrawals series for the event year', () => {
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 51, maxAge: 55, annualSalary: 0, retirementAge: 65 },
+        accounts: [{
+          id: 'a', name: 'Trad', type: 'traditional',
+          balance: 2_000_000,
+          contributionAmount: 0,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 65,
+          withdrawalStartAge: 65,
+        }],
+        annualExpenses: 0,
+        oneTimeExpenses: [{ id: 'e1', label: 'House', age: 51, amountPresentDollars: 500_000 }],
+      }),
+      ZERO_RATES,
+    )
+    // The event-year (age 52 end-of-year) row should record nonzero withdrawals.
+    const eventYear = result.yearlyResults.find((y) => y.age === 52)!
+    expect(eventYear.withdrawals).toBeGreaterThan(400_000)
+  })
+})
+
+describe('runSingleProjection — multi-account withdrawal NaN safety', () => {
+  it('tax-optimal withdraw across drained taxable then roth never produces NaN balances', () => {
+    // Repro: taxable account first (tax-optimal order), small balance gets fully
+    // drained, then a second account (roth) is hit. The previous netFromGross
+    // computed gain fraction from post-withdrawal balance/basis; when the taxable
+    // account was fully drained, both were 0 → 0/0 = NaN, which then poisoned
+    // every subsequent account's balance via `balance -= NaN`.
+    const result = runSingleProjection(
+      inputs({
+        accounts: [
+          {
+            id: 't', name: 'Taxable', type: 'taxable',
+            balance: 5000,
+            contributionAmount: 0,
+            contributionType: 'flat',
+            contributionFrequency: 'monthly',
+            contributionEndAge: 60,
+            withdrawalStartAge: 60,
+          },
+          {
+            id: 'r', name: 'Roth', type: 'roth',
+            balance: 500000,
+            contributionAmount: 0,
+            contributionType: 'flat',
+            contributionFrequency: 'monthly',
+            contributionEndAge: 60,
+            withdrawalStartAge: 60,
+          },
+        ],
+        annualExpenses: 50000,
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 80, annualSalary: 0 },
+        withdrawalStrategy: WithdrawalStrategy.TaxOptimal,
+      }),
+      { stockGrowth: 0.05, inflation: 0.02 },
+    )
+
+    for (const yr of result.yearlyResults) {
+      expect(Number.isFinite(yr.totalBalance)).toBe(true)
+      for (const [, bal] of Object.entries(yr.accountBalances)) {
+        expect(Number.isFinite(bal)).toBe(true)
+      }
+    }
+  })
+})

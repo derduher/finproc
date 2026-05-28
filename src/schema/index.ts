@@ -224,6 +224,19 @@ export interface SensitivityResult {
   hiDelta: number
 }
 
+/**
+ * Historical NOMINAL market assumptions, expressed as P10/P90 bands.
+ * Stock growth: P10 ~4.4%, P90 ~13.5% (implied median ~9%).
+ * Inflation: P10 ~-1.5%, P90 ~8.75%.
+ * Used by the "historical defaults" preset in the markets step.
+ */
+export const HISTORICAL_MARKET_DEFAULTS = {
+  stockGrowthMin: 0.044,
+  stockGrowthMax: 0.135,
+  inflationMin: -0.015,
+  inflationMax: 0.0875,
+} as const
+
 // ─── Default inputs ───────────────────────────────────────────────────────────
 export function defaultInputs(): SimulationInputs {
   return {

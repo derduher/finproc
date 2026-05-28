@@ -186,14 +186,27 @@ describe('SimAccount — contributions', () => {
     expect(acc.getBalance()).toBeCloseTo(0, 5)
   })
 
-  it('contributions apply at or before contributionEndAge', () => {
+  it('contributions apply in years before contributionEndAge', () => {
+    const acc = new SimAccount(
+      makeAccount({ balance: 0, contributionAmount: 1000, contributionType: 'flat', contributionFrequency: 'monthly', contributionEndAge: 62 }),
+      0,
+    )
+    acc.applyMonthlyGrowth(0)
+    acc.contribute(61, 0)
+    expect(acc.getBalance()).toBeCloseTo(1000, 5)
+  })
+
+  it('contributions stop AT contributionEndAge (retirement year is not a contributing year)', () => {
+    // contributionEndAge is the age at which contributions stop, so the year the
+    // person turns that age earns no contribution. This keeps cashflow contributions
+    // ending exactly at the retire marker rather than one year past it.
     const acc = new SimAccount(
       makeAccount({ balance: 0, contributionAmount: 1000, contributionType: 'flat', contributionFrequency: 'monthly', contributionEndAge: 62 }),
       0,
     )
     acc.applyMonthlyGrowth(0)
     acc.contribute(62, 0)
-    expect(acc.getBalance()).toBeCloseTo(1000, 5)
+    expect(acc.getBalance()).toBeCloseTo(0, 5)
   })
 
   it('employer match percent-of-salary: 100% up to 6% on $100K = $6K/yr', () => {

@@ -11,18 +11,24 @@ interface Props {
   depleteAge?: number
   /** Compact variant for sidebars — hides labels, tighter padding */
   inline?: boolean
+  /** Hide the 90th-percentile line/band and rescale to the P50 max for readability */
+  hideP90?: boolean
 }
 
 const PAD = { top: 16, right: 48, bottom: 32, left: 56 }
 
-export function HiFanChart({ result, width = 560, height = 280, retireAge, depleted = false, depleteAge, inline = false }: Props) {
+export function HiFanChart({ result, width = 560, height = 280, retireAge, depleted = false, depleteAge, inline = false, hideP90 = false }: Props) {
   const { yearlyResults } = result
   if (!yearlyResults.length) return null
 
   const W = width - PAD.left - PAD.right
   const H = height - PAD.top - PAD.bottom
 
-  const maxVal = Math.max(...yearlyResults.map((r) => r.p90))
+  // When P90 is hidden, scale the Y-axis to the P50 max so the median and P10
+  // bands aren't squashed against the bottom by the (now-hidden) P90 ceiling.
+  const maxVal = hideP90
+    ? Math.max(...yearlyResults.map((r) => r.p50), 1)
+    : Math.max(...yearlyResults.map((r) => r.p90))
   const minAge = yearlyResults[0].age - 1
   const maxAge = yearlyResults.at(-1)!.age
 
@@ -34,9 +40,11 @@ export function HiFanChart({ result, width = 560, height = 280, retireAge, deple
   const p90points = yearlyResults.map((r) => `${xScale(r.age)},${yScale(r.p90)}`).join(' ')
   const p10points = yearlyResults.map((r) => `${xScale(r.age)},${yScale(r.p10)}`).join(' ')
 
-  // Band fill path: p90 forward, p10 backward
+  // Band fill path: upper boundary forward, p10 backward. When P90 is hidden the
+  // upper boundary is P50 so the shaded region shows only the downside spread.
+  const upperKey = hideP90 ? 'p50' : 'p90'
   const bandPath =
-    `M ${yearlyResults.map((r) => `${xScale(r.age)},${yScale(r.p90)}`).join(' L ')} ` +
+    `M ${yearlyResults.map((r) => `${xScale(r.age)},${yScale(r[upperKey])}`).join(' L ')} ` +
     `L ${[...yearlyResults].reverse().map((r) => `${xScale(r.age)},${yScale(r.p10)}`).join(' L ')} Z`
 
   // Y-axis ticks
@@ -57,7 +65,9 @@ export function HiFanChart({ result, width = 560, height = 280, retireAge, deple
         <path d={bandPath} fill="var(--chart-band)" />
 
         {/* P90 dashed border */}
-        <polyline points={p90points} fill="none" stroke="var(--accent-soft)" strokeWidth={1} strokeDasharray="4 3" />
+        {!hideP90 && (
+          <polyline points={p90points} fill="none" stroke="var(--accent-soft)" strokeWidth={1} strokeDasharray="4 3" />
+        )}
 
         {/* P10 dashed border */}
         <polyline points={p10points} fill="none" stroke="var(--accent-soft)" strokeWidth={1} strokeDasharray="4 3" />
@@ -107,8 +117,10 @@ export function HiFanChart({ result, width = 560, height = 280, retireAge, deple
         ))}
 
         {/* Labels */}
-        <text x={W} y={yScale(yearlyResults.at(-1)!.p90) - 4}
-          textAnchor="end" fill="var(--ink-3)" fontSize={10}>P90</text>
+        {!hideP90 && (
+          <text x={W} y={yScale(yearlyResults.at(-1)!.p90) - 4}
+            textAnchor="end" fill="var(--ink-3)" fontSize={10}>P90</text>
+        )}
         <text x={W} y={yScale(yearlyResults.at(-1)!.p50) - 4}
           textAnchor="end" fill="var(--ink)" fontSize={10} fontWeight="500">P50</text>
         <text x={W} y={yScale(yearlyResults.at(-1)!.p10) + 12}
