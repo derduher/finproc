@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { HiFanChart } from './HiFanChart'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
@@ -106,5 +106,33 @@ describe('HiFanChart — depletion marker', () => {
   it('does not render depletion marker when depleted is false', () => {
     render(<HiFanChart result={makeResult()} depleted={false} depleteAge={78} />)
     expect(screen.queryByText(/depleted/i)).toBeNull()
+  })
+})
+
+describe('HiFanChart — hover overlay', () => {
+  it('shows a value/year overlay tracking the nearest year on pointer move', () => {
+    const width = 560
+    const { container } = render(<HiFanChart result={makeResult()} width={width} />)
+    const svg = container.querySelector('svg') as SVGSVGElement
+
+    // jsdom has no layout — pin a known geometry so x→age maps deterministically.
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: width, bottom: 280, width, height: 280, x: 0, y: 0, toJSON() {} }) as DOMRect
+
+    // ages start at 32 (minAge 31). PAD.left=56, PAD.right=48 → plot width W=456.
+    // age 45 sits at 56 + ((45-31)/(95-31))*456 ≈ 56 + 99.75 = 155.75.
+    // jsdom doesn't expose PointerEvent, and testing-library's fireEvent.pointerMove
+    // falls back to a bare Event that drops clientX. A MouseEvent typed 'pointermove'
+    // is defined, carries clientX, and still triggers React's onPointerMove.
+    const move = new MouseEvent('pointermove', { bubbles: true, clientX: 156, clientY: 100 })
+    fireEvent(svg, move)
+
+    const tooltip = container.querySelector('[data-testid="fan-tooltip"]')
+    expect(tooltip).not.toBeNull()
+    expect(tooltip!.textContent).toContain('age 45')
+
+    // Leaving clears the overlay.
+    fireEvent.pointerLeave(svg)
+    expect(container.querySelector('[data-testid="fan-tooltip"]')).toBeNull()
   })
 })
