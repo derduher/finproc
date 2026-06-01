@@ -96,6 +96,19 @@ export class SimAccount {
     }
   }
 
+  /**
+   * Deposit raw cash into the account (used to reinvest RMD proceeds that exceed
+   * spending need — see projection.ts). For taxable accounts the deposited cash is
+   * after-tax, so cost basis rises 1:1 with the balance.
+   */
+  deposit(amount: number): void {
+    if (amount <= 0) return
+    this.balance += amount
+    if (this.def.type === 'taxable') {
+      this.costBasis += amount
+    }
+  }
+
   // ─── Withdrawals ────────────────────────────────────────────────────────────
 
   /**
@@ -149,6 +162,17 @@ export class SimAccount {
     if (currentAge >= this.def.contributionEndAge) return 0
     const monthly = this.monthlyContributionAmount(annualSalary) + this.monthlyMatchAmount(annualSalary)
     return monthly * 12
+  }
+
+  /**
+   * Annual employee contribution only (excludes employer match), if still in
+   * contribution phase. Used by `runSingleProjection` to compute working-years
+   * take-home pay: the employer match is never paid from the employee's salary,
+   * and traditional employee contributions are pre-tax.
+   */
+  annualEmployeeContribution(currentAge: number, annualSalary: number): number {
+    if (currentAge >= this.def.contributionEndAge) return 0
+    return this.monthlyContributionAmount(annualSalary) * 12
   }
 
   private monthlyContributionAmount(annualSalary: number): number {

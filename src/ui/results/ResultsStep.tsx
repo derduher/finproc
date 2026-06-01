@@ -46,9 +46,14 @@ export function ResultsStep() {
   const result = deflateResult(rawResult, displayMode, inputs)
   const isReal = displayMode === 'real'
 
-  const sensitivity = runSensitivity(inputs, 100)
-  // Insights use the raw (nominal) result so insight numerics aren't mode-dependent.
-  const insights = computeInsights(inputs, rawResult, { runCount: 100 })
+  // Sensitivity deltas are common-random-number paired (base vs perturbed share a
+  // seed), so they're stable at a modest run count.
+  const sensitivity = runSensitivity(inputs, 200)
+  // Insights diff against the worker's full 1,000-run baseline, so the rules run at
+  // the same resolution for a paired comparison and gate each delta on significance
+  // (bug #6 — at 100 runs the ~6pp seed noise swamped the ~2–7pp effects reported).
+  // These are memoized by the React Compiler, so they recompute only on input change.
+  const insights = computeInsights(inputs, rawResult)
 
   const successRateValid = Number.isFinite(result.successRate)
   const successPct = successRateValid ? Math.round(result.successRate * 100) : null

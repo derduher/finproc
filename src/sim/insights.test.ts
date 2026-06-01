@@ -121,6 +121,44 @@ describe('computeInsights — retire-one-year-later rule', () => {
     }
   })
 
+  it('bug #6: a real ~9pp effect still fires at full (1000-run) resolution', () => {
+    // $1.3M, retire 62, expenses 65k → base ≈ 56%, +1yr ≈ 65% (delta ≈ 9pp, well
+    // above the significance bar at n=1000). Guards against the gate over-suppressing.
+    const inp = inputs({
+      person: { ...defaultInputs().person, currentAge: 60, maxAge: 90, annualSalary: 120_000 },
+      accounts: [{
+        id: 'trad', name: '401k', type: 'traditional',
+        balance: 1_300_000,
+        contributionAmount: 2500, contributionType: 'flat', contributionFrequency: 'monthly',
+        contributionEndAge: 62, withdrawalStartAge: 59,
+      }],
+      annualExpenses: 65_000,
+    })
+    const result = runMonteCarlo(inp, 1000, 42)
+    const insights = computeInsights(inp, result, { runCount: 1000 })
+    const later = insights.find((i) => i.title.toLowerCase().includes('one more year'))
+    expect(later).toBeDefined()
+    expect(later?.tone).toBe('accent')
+  })
+
+  it('bug #6: the same effect is suppressed at a tiny run count (cannot beat noise)', () => {
+    const inp = inputs({
+      person: { ...defaultInputs().person, currentAge: 60, maxAge: 90, annualSalary: 120_000 },
+      accounts: [{
+        id: 'trad', name: '401k', type: 'traditional',
+        balance: 1_300_000,
+        contributionAmount: 2500, contributionType: 'flat', contributionFrequency: 'monthly',
+        contributionEndAge: 62, withdrawalStartAge: 59,
+      }],
+      annualExpenses: 65_000,
+    })
+    const result = runMonteCarlo(inp, 8, 42)
+    const insights = computeInsights(inp, result, { runCount: 8 })
+    const later = insights.find((i) => i.title.toLowerCase().includes('one more year'))
+    // ~9pp is real but indistinguishable from noise at n=8 → stay silent.
+    expect(later).toBeUndefined()
+  })
+
   it('does NOT fire when there are no accounts', () => {
     const inp = inputs({
       person: { ...defaultInputs().person, currentAge: 70, maxAge: 90 },
