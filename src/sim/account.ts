@@ -1,4 +1,5 @@
 import type { Account } from '../schema'
+import { irsContributionLimit } from './irsLimits'
 
 // Contribution frequency multipliers: how many "units" per month
 const FREQ_MULTIPLIER: Record<Account['contributionFrequency'], number> = {
@@ -75,7 +76,10 @@ export class SimAccount {
    * @param annualSalary   Current year salary (used for percent contributions)
    */
   contribute(currentAge: number, annualSalary: number): void {
-    if (currentAge > this.def.contributionEndAge) return
+    // contributionEndAge is the age at which contributions STOP, so the year the
+    // person turns that age earns no contribution (exclusive). For a plan that
+    // retires at 62 with contributionEndAge = 62, the last contributing year is 61.
+    if (currentAge >= this.def.contributionEndAge) return
 
     const monthlyContrib = this.monthlyContributionAmount(annualSalary)
     const monthlyMatch = this.monthlyMatchAmount(annualSalary)
@@ -142,13 +146,22 @@ export class SimAccount {
    * to subtract pre-retirement contributions from disposable income.
    */
   annualContribution(currentAge: number, annualSalary: number): number {
-    if (currentAge > this.def.contributionEndAge) return 0
+    if (currentAge >= this.def.contributionEndAge) return 0
     const monthly = this.monthlyContributionAmount(annualSalary) + this.monthlyMatchAmount(annualSalary)
     return monthly * 12
   }
 
   private monthlyContributionAmount(annualSalary: number): number {
-    const { contributionAmount, contributionType, contributionFrequency } = this.def
+    const { contributionAmount, contributionType, contributionFrequency, contributeMax, accountSubtype } = this.def
+
+    // contributeMax: derive from IRS limit for the subtype. Only meaningful
+    // when accountSubtype is '401k' or 'ira'. Falls through to the user-
+    // entered amount if no subtype is set.
+    if (contributeMax) {
+      const annualLimit = irsContributionLimit(accountSubtype)
+      if (annualLimit > 0) return annualLimit / 12
+    }
+
     const multiplier = FREQ_MULTIPLIER[contributionFrequency]
 
     if (contributionType === 'percent') {

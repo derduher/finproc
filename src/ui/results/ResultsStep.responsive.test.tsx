@@ -91,4 +91,29 @@ describe('ResultsStep responsive — CSS-driven layout', () => {
   it('styles.css base rule sets [data-metrics-grid] to 4-col desktop layout', () => {
     expect(css).toMatch(/\[data-metrics-grid\][^{]*\{[^}]*grid-template-columns\s*:\s*1\.4fr/s)
   })
+
+  it('cashflow/sensitivity grid uses data-cashflow-grid and no inline template columns', () => {
+    const { container } = render(<ResultsStep />)
+    const grid = container.querySelector('[data-cashflow-grid]') as HTMLElement
+    expect(grid).not.toBeNull()
+    expect(grid.style.gridTemplateColumns).toBe('')
+  })
+
+  it('styles.css collapses [data-cashflow-grid] to a single column on mobile', () => {
+    const mediaIdx = css.indexOf('@media (max-width: 768px)')
+    const openIdx = css.indexOf('{', mediaIdx)
+    let depth = 1
+    let i = openIdx + 1
+    while (i < css.length && depth > 0) {
+      if (css[i] === '{') depth++
+      else if (css[i] === '}') depth--
+      i++
+    }
+    const block = css.slice(openIdx, i)
+    expect(block).toMatch(/\[data-cashflow-grid\][^{]*\{[^}]*grid-template-columns\s*:\s*1fr/)
+  })
+
+  it('styles.css gives chart grid children min-width:0 so tracks can shrink below content width', () => {
+    expect(css).toMatch(/\[data-cashflow-grid\]\s*>\s*\*\s*\{[^}]*min-width\s*:\s*0/)
+  })
 })

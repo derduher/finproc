@@ -179,7 +179,7 @@ export function runSingleProjection(
 
       if (netNeed > 0) {
         const balBefore = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
-        const shortfall = makeWithdrawals(
+        let shortfall = makeWithdrawals(
           simAccounts,
           netNeed,
           yearStartAge,
@@ -187,7 +187,27 @@ export function runSingleProjection(
           withdrawalOrder ?? [],
           person.marginalTaxRate,
           person.ltcgRate,
+          false,
         )
+
+        // One-time expenses can't be deferred. If accounts that would normally
+        // cover the need are still locked (withdrawalStartAge > currentAge),
+        // re-run the withdrawal pass with the lockout lifted — modeling the
+        // real-world reality that you'd tap a locked account (early-withdrawal
+        // penalties aside) rather than silently absorb a lump-sum cost.
+        if (shortfall > 0.01 && oneTimeTotal > 0) {
+          const cap = Math.min(shortfall, oneTimeTotal)
+          shortfall = (shortfall - cap) + makeWithdrawals(
+            simAccounts,
+            cap,
+            yearStartAge,
+            withdrawalStrategy,
+            withdrawalOrder ?? [],
+            person.marginalTaxRate,
+            person.ltcgRate,
+            true,
+          )
+        }
 
         // RMDs: forced withdrawal from traditional accounts at age 73+
         const divisor = rmdDivisor(yearStartAge)
@@ -263,23 +283,28 @@ function makeWithdrawals(
   userOrder: string[],
   marginalRate: number,
   ltcgRate: number,
+  forceUnlock: boolean,
 ): number {
   let remaining = netNeed
-  const ordered = orderAccounts(accounts, strategy, userOrder, currentAge)
+  const ordered = orderAccounts(accounts, strategy, userOrder, currentAge, forceUnlock)
 
   if (strategy === WithdrawalStrategy.Proportional) {
-    return makeProportionalWithdrawals(accounts, netNeed, currentAge, marginalRate, ltcgRate)
+    return makeProportionalWithdrawals(accounts, netNeed, currentAge, marginalRate, ltcgRate, forceUnlock)
   }
 
   for (const acc of ordered) {
     if (remaining <= 0) break
     if (acc.getBalance() <= 0) continue
 
+    const balBefore = acc.getBalance()
+    const basisBefore = acc.getCostBasis()
     const gross = grossNeeded(acc, remaining, marginalRate, ltcgRate)
-    const actualGross = acc.withdraw(gross, currentAge)
+    // forceUnlock: bypass SimAccount's withdrawalStartAge check by passing
+    // undefined (per its documented "omit to skip check" behavior).
+    const actualGross = acc.withdraw(gross, forceUnlock ? undefined : currentAge)
     if (actualGross <= 0) continue
 
-    const netDelivered = netFromGross(acc, actualGross, marginalRate, ltcgRate)
+    const netDelivered = netFromGross(acc, actualGross, balBefore, basisBefore, marginalRate, ltcgRate)
     remaining = Math.max(0, remaining - netDelivered)
   }
 
@@ -292,9 +317,10 @@ function makeProportionalWithdrawals(
   currentAge: number,
   marginalRate: number,
   ltcgRate: number,
+  forceUnlock: boolean,
 ): number {
   const eligible = accounts.filter(
-    (a) => a.getBalance() > 0 && a.withdrawalStartAge <= currentAge,
+    (a) => a.getBalance() > 0 && (forceUnlock || a.withdrawalStartAge <= currentAge),
   )
   if (eligible.length === 0) return netNeed
 
@@ -306,10 +332,12 @@ function makeProportionalWithdrawals(
   for (const acc of eligible) {
     const share = acc.getBalance() / totalBalance
     const netShare = netNeed * share
+    const balBefore = acc.getBalance()
+    const basisBefore = acc.getCostBasis()
     const gross = grossNeeded(acc, netShare, marginalRate, ltcgRate)
-    const actualGross = acc.withdraw(gross, currentAge)
+    const actualGross = acc.withdraw(gross, forceUnlock ? undefined : currentAge)
     if (actualGross <= 0) continue
-    const net = netFromGross(acc, actualGross, marginalRate, ltcgRate)
+    const net = netFromGross(acc, actualGross, balBefore, basisBefore, marginalRate, ltcgRate)
     remaining = Math.max(0, remaining - net)
   }
 
@@ -330,15 +358,16 @@ function grossNeeded(
 function netFromGross(
   acc: SimAccount,
   gross: number,
+  balBefore: number,
+  basisBefore: number,
   marginalRate: number,
   ltcgRate: number,
 ): number {
   if (acc.type === 'roth') return gross
   if (acc.type === 'traditional') return gross * (1 - marginalRate)
-  // taxable: gain fraction based on current balance (after withdrawal was taken)
-  const balAfter = acc.getBalance()
-  const balBefore = balAfter + gross
-  const basisBefore = acc.getCostBasis() + (gross * (balBefore > 0 ? acc.getCostBasis() / balAfter : 0))
+  // taxable: gain fraction derived from the pre-withdrawal balance and basis.
+  // (Reconstructing from post-withdrawal state breaks when the account is fully
+  // drained — basis and balance both go to 0, yielding 0/0 = NaN.)
   const gainFrac = balBefore > 0 ? Math.max(0, (balBefore - basisBefore) / balBefore) : 0
   return gross - gross * gainFrac * ltcgRate
 }
@@ -348,8 +377,9 @@ function orderAccounts(
   strategy: WithdrawalStrategy,
   userOrder: string[],
   currentAge: number,
+  forceUnlock: boolean,
 ): SimAccount[] {
-  const eligible = accounts.filter((a) => a.withdrawalStartAge <= currentAge)
+  const eligible = accounts.filter((a) => forceUnlock || a.withdrawalStartAge <= currentAge)
 
   if (strategy === WithdrawalStrategy.TaxOptimal) {
     const order = ['taxable', 'traditional', 'roth'] as const

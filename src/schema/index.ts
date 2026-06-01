@@ -86,6 +86,18 @@ export const AccountSchema = z.object({
   withdrawalStartAge: z.number().int().min(0).max(130),
   /** Only for traditional accounts */
   employerMatch: EmployerMatchSchema.optional(),
+  /**
+   * Refines the account `type` for IRS-limit purposes. Only meaningful when
+   * type is 'traditional' or 'roth'; taxable accounts have no IRS cap.
+   * Optional for back-compat with URLs that predate this field.
+   */
+  accountSubtype: z.enum(['401k', 'ira', 'other']).optional(),
+  /**
+   * When true, the simulation ignores `contributionAmount` and uses the
+   * annual IRS limit for `accountSubtype` (divided by 12, monthly).
+   * Only effective when accountSubtype is '401k' or 'ira'.
+   */
+  contributeMax: z.boolean().optional(),
 })
 
 export type Account = z.infer<typeof AccountSchema>
@@ -211,6 +223,19 @@ export interface SensitivityResult {
   /** Success rate delta when input is increased 20% */
   hiDelta: number
 }
+
+/**
+ * Historical NOMINAL market assumptions, expressed as P10/P90 bands.
+ * Stock growth: P10 ~4.4%, P90 ~13.5% (implied median ~9%).
+ * Inflation: P10 ~-1.5%, P90 ~8.75%.
+ * Used by the "historical defaults" preset in the markets step.
+ */
+export const HISTORICAL_MARKET_DEFAULTS = {
+  stockGrowthMin: 0.044,
+  stockGrowthMax: 0.135,
+  inflationMin: -0.015,
+  inflationMax: 0.0875,
+} as const
 
 // ─── Default inputs ───────────────────────────────────────────────────────────
 export function defaultInputs(): SimulationInputs {

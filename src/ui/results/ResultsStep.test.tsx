@@ -291,6 +291,12 @@ describe('ResultsStep — sensitivity', () => {
     render(<ResultsStep />)
     expect(screen.getByText(/sensitivity|top levers/i)).toBeInTheDocument()
   })
+
+  it('renders a brief explanation of how to read the tornado chart', () => {
+    const { container } = render(<ResultsStep />)
+    // Should explain the meaning of bars (positive = improves success, negative = lowers success)
+    expect(container.textContent).toMatch(/each (input|lever)|how to read|success rate.*chang/i)
+  })
 })
 
 describe('ResultsStep — insight cards', () => {
@@ -339,5 +345,28 @@ describe('ResultsStep — scenario footer', () => {
   it('renders "Compare this scenario" text', () => {
     render(<ResultsStep />)
     expect(screen.getByText(/compare this scenario/i)).toBeInTheDocument()
+  })
+
+  it('Share link button shows "Copied" feedback after click', async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn(() => Promise.resolve()) } })
+    render(<ResultsStep />)
+    const btn = screen.getByRole('button', { name: /share link/i })
+    fireEvent.click(btn)
+    expect(await screen.findByText(/copied/i)).toBeInTheDocument()
+  })
+
+  it('Copy as JSON button shows "Copied" feedback after click', async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn(() => Promise.resolve()) } })
+    render(<ResultsStep />)
+    const btn = screen.getByRole('button', { name: /copy as json/i })
+    fireEvent.click(btn)
+    expect(await screen.findByText(/copied/i)).toBeInTheDocument()
+  })
+
+  it('shows confirmation feedback after Branch scenario is clicked', () => {
+    render(<ResultsStep />)
+    const btns = screen.getAllByRole('button', { name: /branch scenario/i })
+    fireEvent.click(btns[btns.length - 1])
+    expect(screen.getByText(/saved|branched/i)).toBeInTheDocument()
   })
 })

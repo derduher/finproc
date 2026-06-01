@@ -282,9 +282,25 @@
   gap: 12px;
 }
 
+/* Cashflow + sensitivity row — desktop: 2-col; mobile: stacked single col. */
+[data-cashflow-grid] {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 18px;
+}
+/* Let grid tracks shrink below their content's intrinsic width so wide charts
+   scroll inside their own container instead of widening the page. */
+[data-cashflow-grid] > * { min-width: 0; }
+
+/* Insights row — desktop: up to 3-col; mobile: stacked single col. */
+[data-insights-grid] { display: grid; gap: 18px; }
+[data-insights-grid] > * { min-width: 0; }
+
 @media (max-width: 768px) {
   .shell-desktop-only { display: none !important; }
   .shell-mobile-only { display: flex !important; }
   [data-pipe-editor] { flex-direction: column; }
   [data-metrics-grid] { grid-template-columns: 1fr 1fr; }
+  [data-cashflow-grid] { grid-template-columns: 1fr; }
+  [data-insights-grid] { grid-template-columns: 1fr !important; }
 }

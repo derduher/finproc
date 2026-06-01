@@ -93,6 +93,23 @@ describe('TopBar — Share button', () => {
     render(<TopBar />)
     expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument()
   })
+
+  it('shows "Copied" feedback after the Share button is clicked', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.assign(navigator, { clipboard: { writeText } })
+    render(<TopBar />)
+    const btn = screen.getByRole('button', { name: /share/i })
+    fireEvent.click(btn)
+    expect(writeText).toHaveBeenCalled()
+    expect(await screen.findByText(/copied/i)).toBeInTheDocument()
+  })
+})
+
+describe('TopBar — no fake profile avatar', () => {
+  it('does not render a misleading "User" avatar', () => {
+    const { container } = render(<TopBar />)
+    expect(container.querySelector('[aria-label="User"]')).toBeNull()
+  })
 })
 
 describe('TopBar — Help button', () => {

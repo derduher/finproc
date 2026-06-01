@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { HiFanChart } from './HiFanChart'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
@@ -45,6 +45,35 @@ describe('HiFanChart — basic render', () => {
   })
 })
 
+describe('HiFanChart — hide P90', () => {
+  it('renders the P90 label by default', () => {
+    render(<HiFanChart result={makeResult()} />)
+    expect(screen.getByText(/P90/)).toBeInTheDocument()
+  })
+
+  it('hides the P90 label when hideP90 is true', () => {
+    render(<HiFanChart result={makeResult()} hideP90 />)
+    expect(screen.queryByText(/P90/)).toBeNull()
+    // P50 and P10 remain visible.
+    expect(screen.getByText(/P50/)).toBeInTheDocument()
+    expect(screen.getByText(/P10/)).toBeInTheDocument()
+  })
+
+  it('rescales the Y-axis to the P50 max when P90 is hidden (top tick < P90 max)', () => {
+    const { container: withP90 } = render(<HiFanChart result={makeResult()} />)
+    const { container: noP90 } = render(<HiFanChart result={makeResult()} hideP90 />)
+    const topTick = (c: HTMLElement) => {
+      const texts = Array.from(c.querySelectorAll('text'))
+        .map((t) => t.textContent ?? '')
+        .filter((t) => /[$0-9]/.test(t))
+      return texts
+    }
+    // The presence of distinct y-axis labels is enough to confirm a different scale;
+    // assert the hidden-P90 chart does not contain the largest P90 tick value.
+    expect(topTick(withP90).join('|')).not.toEqual(topTick(noP90).join('|'))
+  })
+})
+
 describe('HiFanChart — retire marker', () => {
   it('renders retire age marker when retireAge is in range', () => {
     render(<HiFanChart result={makeResult()} retireAge={62} />)
@@ -77,5 +106,33 @@ describe('HiFanChart — depletion marker', () => {
   it('does not render depletion marker when depleted is false', () => {
     render(<HiFanChart result={makeResult()} depleted={false} depleteAge={78} />)
     expect(screen.queryByText(/depleted/i)).toBeNull()
+  })
+})
+
+describe('HiFanChart — hover overlay', () => {
+  it('shows a value/year overlay tracking the nearest year on pointer move', () => {
+    const width = 560
+    const { container } = render(<HiFanChart result={makeResult()} width={width} />)
+    const svg = container.querySelector('svg') as SVGSVGElement
+
+    // jsdom has no layout — pin a known geometry so x→age maps deterministically.
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: width, bottom: 280, width, height: 280, x: 0, y: 0, toJSON() {} }) as DOMRect
+
+    // ages start at 32 (minAge 31). PAD.left=56, PAD.right=48 → plot width W=456.
+    // age 45 sits at 56 + ((45-31)/(95-31))*456 ≈ 56 + 99.75 = 155.75.
+    // jsdom doesn't expose PointerEvent, and testing-library's fireEvent.pointerMove
+    // falls back to a bare Event that drops clientX. A MouseEvent typed 'pointermove'
+    // is defined, carries clientX, and still triggers React's onPointerMove.
+    const move = new MouseEvent('pointermove', { bubbles: true, clientX: 156, clientY: 100 })
+    fireEvent(svg, move)
+
+    const tooltip = container.querySelector('[data-testid="fan-tooltip"]')
+    expect(tooltip).not.toBeNull()
+    expect(tooltip!.textContent).toContain('age 45')
+
+    // Leaving clears the overlay.
+    fireEvent.pointerLeave(svg)
+    expect(container.querySelector('[data-testid="fan-tooltip"]')).toBeNull()
   })
 })

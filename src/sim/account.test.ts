@@ -57,6 +57,75 @@ describe('SimAccount — monthly growth', () => {
   })
 })
 
+describe('SimAccount — contribute max (IRS limit)', () => {
+  it('with contributeMax=true and accountSubtype="401k", monthly contribution is 401k limit / 12', () => {
+    const acc = new SimAccount(
+      makeAccount({
+        type: 'traditional',
+        accountSubtype: '401k',
+        contributeMax: true,
+        contributionAmount: 50, // should be ignored
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+      }),
+      0,
+    )
+    acc.contribute(40, 100000)
+    // 2026 401k limit = $24,500 → $2041.67/mo
+    expect(acc.getBalance()).toBeCloseTo(24500 / 12, 2)
+  })
+
+  it('with contributeMax=true and accountSubtype="ira", monthly contribution is IRA limit / 12', () => {
+    const acc = new SimAccount(
+      makeAccount({
+        type: 'traditional',
+        accountSubtype: 'ira',
+        contributeMax: true,
+        contributionAmount: 50,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+      }),
+      0,
+    )
+    acc.contribute(40, 100000)
+    // 2026 IRA limit = $7,500 → $625/mo
+    expect(acc.getBalance()).toBeCloseTo(7500 / 12, 2)
+  })
+
+  it('with contributeMax=true but subtype undefined → falls back to flat contribution', () => {
+    const acc = new SimAccount(
+      makeAccount({
+        type: 'traditional',
+        contributeMax: true,
+        // no accountSubtype
+        contributionAmount: 250,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+      }),
+      0,
+    )
+    acc.contribute(40, 100000)
+    expect(acc.getBalance()).toBeCloseTo(250, 2)
+  })
+
+  it('contributeMax respects contributionEndAge', () => {
+    const acc = new SimAccount(
+      makeAccount({
+        type: 'traditional',
+        accountSubtype: '401k',
+        contributeMax: true,
+        contributionAmount: 0,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+        contributionEndAge: 62,
+      }),
+      0,
+    )
+    acc.contribute(65, 100000) // past contributionEndAge
+    expect(acc.getBalance()).toBe(0)
+  })
+})
+
 describe('SimAccount — contributions', () => {
   it('flat monthly contribution: balance = initial + contrib × months (no growth)', () => {
     const acc = new SimAccount(
@@ -117,14 +186,27 @@ describe('SimAccount — contributions', () => {
     expect(acc.getBalance()).toBeCloseTo(0, 5)
   })
 
-  it('contributions apply at or before contributionEndAge', () => {
+  it('contributions apply in years before contributionEndAge', () => {
+    const acc = new SimAccount(
+      makeAccount({ balance: 0, contributionAmount: 1000, contributionType: 'flat', contributionFrequency: 'monthly', contributionEndAge: 62 }),
+      0,
+    )
+    acc.applyMonthlyGrowth(0)
+    acc.contribute(61, 0)
+    expect(acc.getBalance()).toBeCloseTo(1000, 5)
+  })
+
+  it('contributions stop AT contributionEndAge (retirement year is not a contributing year)', () => {
+    // contributionEndAge is the age at which contributions stop, so the year the
+    // person turns that age earns no contribution. This keeps cashflow contributions
+    // ending exactly at the retire marker rather than one year past it.
     const acc = new SimAccount(
       makeAccount({ balance: 0, contributionAmount: 1000, contributionType: 'flat', contributionFrequency: 'monthly', contributionEndAge: 62 }),
       0,
     )
     acc.applyMonthlyGrowth(0)
     acc.contribute(62, 0)
-    expect(acc.getBalance()).toBeCloseTo(1000, 5)
+    expect(acc.getBalance()).toBeCloseTo(0, 5)
   })
 
   it('employer match percent-of-salary: 100% up to 6% on $100K = $6K/yr', () => {

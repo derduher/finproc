@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { useSimulation } from '../../hooks/useSimulation'
 import { useScenarios } from '../../hooks/useScenarios'
 import { runSensitivity } from '../../sim/sensitivity'
 import { computeInsights } from '../../sim/insights'
+import { findRetirementAgeForSuccess } from '../../sim/retirementSolver'
+import type { RetirementSolveResult } from '../../sim/retirementSolver'
 import { useStore } from '../../store'
 import { formatMoneyAbbreviated } from '../../math'
 import { deflateResult } from '../../sim/displayMode'
@@ -20,7 +23,14 @@ export function ResultsStep() {
   const displayMode = useStore((s) => s.ui.displayMode)
   const setActiveStep = useStore((s) => s.setActiveStep)
   const { result: rawResult, loading, stale, progress } = useSimulation(inputs)
-  const { saveScenario } = useScenarios()
+  const { scenarios, saveScenario } = useScenarios()
+  const [shareCopied, setShareCopied] = useState(false)
+  const [jsonCopied, setJsonCopied] = useState(false)
+  const [branchSaved, setBranchSaved] = useState(false)
+  const [hideP90, setHideP90] = useState(false)
+  const [targetPct, setTargetPct] = useState(90)
+  // undefined = not run yet; null = no age reaches the target; otherwise the result.
+  const [solveResult, setSolveResult] = useState<RetirementSolveResult | null | undefined>(undefined)
 
   if (loading || !rawResult) {
     return (
@@ -58,6 +68,12 @@ export function ResultsStep() {
   // First age where the P10 portfolio path hits zero (matches what the user
   // sees in the fan chart). Undefined when P10 stays positive through maxAge.
   const p10DepleteAge = result.yearlyResults.find((r) => r.p10 <= 0)?.age
+
+  const handleSolve = () => {
+    const target = Math.min(100, Math.max(1, targetPct)) / 100
+    const r = findRetirementAgeForSuccess(inputs, target, { runCount: 200 })
+    setSolveResult(r ?? null)
+  }
 
   return (
     <div style={{ maxWidth: 1200, display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -224,6 +240,15 @@ export function ResultsStep() {
               P10–P90 band of <span className="num">1,000</span> simulated paths · solid line = median
             </div>
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <input
+              type="checkbox"
+              aria-label="Hide 90th percentile"
+              checked={hideP90}
+              onChange={(e) => setHideP90(e.target.checked)}
+            />
+            hide P90
+          </label>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <HiFanChart
@@ -231,6 +256,7 @@ export function ResultsStep() {
             retireAge={retireAge}
             depleted={depleted}
             depleteAge={result.medianDepleteAge}
+            hideP90={hideP90}
             width={1100}
             height={320}
           />
@@ -239,10 +265,8 @@ export function ResultsStep() {
 
       {/* ── Cashflow + sensitivity ── */}
       <div
+        data-cashflow-grid
         style={{
-          display: 'grid',
-          gridTemplateColumns: '1.4fr 1fr',
-          gap: 18,
           opacity: stale ? 0.6 : 1,
           transition: 'opacity .3s',
         }}
@@ -267,6 +291,7 @@ export function ResultsStep() {
           <div style={{ overflowX: 'auto' }}>
             <HiCashflow
               data={result.yearlyResults}
+              currentAge={inputs.person.currentAge}
               retireAge={retireAge}
               ssAge={ssAge}
               width={660}
@@ -292,17 +317,74 @@ export function ResultsStep() {
               </div>
             </div>
           </div>
-          <HiTornado data={sensitivity} width={400} />
+          <div style={{ overflowX: 'auto' }}>
+            <HiTornado data={sensitivity} width={400} />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 10, lineHeight: 1.5 }}>
+            How to read: each lever was moved <span className="num">±20%</span> from your baseline.
+            Bars to the right mean success rate goes up; bars to the left mean success rate goes
+            down. The top row has the largest impact.
+          </div>
         </div>
+      </div>
+
+      {/* ── Retirement-age solver ── */}
+      <div className="card" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <h3 style={{ margin: 0 }}>When can I retire?</h3>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>
+              Find the earliest retirement age that hits a target success rate.
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <label htmlFor="solve-target" style={{ fontSize: 13, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              target
+              <input
+                id="solve-target"
+                aria-label="Target success rate percent"
+                type="number"
+                className="field field-num"
+                style={{ width: 72 }}
+                min={1}
+                max={100}
+                step={1}
+                value={targetPct}
+                onChange={(e) => setTargetPct(Number(e.target.value))}
+              />
+              %
+            </label>
+            <button type="button" className="btn btn-sm btn-primary" onClick={handleSolve}>
+              Find age
+            </button>
+          </div>
+        </div>
+        {solveResult !== undefined && (
+          <div role="status" style={{ fontSize: 14, color: 'var(--ink)', marginTop: 4 }}>
+            {solveResult === null ? (
+              <span style={{ color: 'var(--bad)' }}>
+                No retirement age up to {inputs.person.maxAge} reaches {targetPct}% success with these inputs.
+              </span>
+            ) : (
+              <>
+                Retire at age{' '}
+                <span className="num" style={{ color: 'var(--good)', fontWeight: 600 }}>{solveResult.age}</span>{' '}
+                for ≈ <span className="num">{Math.round(solveResult.successRate * 100)}%</span> success.
+                {solveResult.age !== inputs.person.retirementAge && (
+                  <span style={{ color: 'var(--ink-3)' }}> (your plan currently retires at {inputs.person.retirementAge})</span>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Insight cards ── */}
       {insights.length > 0 && (
         <div
+          data-insights-grid
           style={{
-            display: 'grid',
             gridTemplateColumns: `repeat(${Math.min(insights.length, 3)}, 1fr)`,
-            gap: 18,
           }}
         >
           {insights.map((insight) => (
@@ -357,30 +439,50 @@ export function ResultsStep() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {branchSaved && (
+            <span
+              role="status"
+              style={{ fontSize: 12, color: 'var(--good)' }}
+            >
+              Scenario saved
+            </span>
+          )}
           <button
             type="button"
             className="btn btn-sm"
+            aria-label="Copy as JSON"
             onClick={() => {
               const json = JSON.stringify(inputs, null, 2)
               navigator.clipboard?.writeText(json).catch(() => {})
+              setJsonCopied(true)
+              setTimeout(() => setJsonCopied(false), 1800)
             }}
           >
-            Copy as JSON
+            {jsonCopied ? 'Copied!' : 'Copy as JSON'}
           </button>
           <button
             type="button"
             className="btn btn-sm"
+            aria-label="Share link"
             onClick={() => {
               navigator.clipboard?.writeText(window.location.href).catch(() => {})
+              setShareCopied(true)
+              setTimeout(() => setShareCopied(false), 1800)
             }}
           >
-            Share link
+            {shareCopied ? 'Copied!' : 'Share link'}
           </button>
           <button
             type="button"
             className="btn btn-sm btn-primary"
-            onClick={() => saveScenario(inputs.scenarioName + ' (branch)', inputs)}
+            disabled={scenarios.length >= 4}
+            title={scenarios.length >= 4 ? 'Scenario limit reached (4). Delete one to add more.' : undefined}
+            onClick={() => {
+              saveScenario(inputs.scenarioName + ' (branch)', inputs)
+              setBranchSaved(true)
+              setTimeout(() => setBranchSaved(false), 2200)
+            }}
           >
             ＋ Branch scenario
           </button>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import { Seg } from '../shared/Field'
+import { HISTORICAL_MARKET_DEFAULTS } from '../../schema'
 import type { Breakpoint } from '../../schema'
 
 type Series = 'growth' | 'inflation' | 'both'
@@ -373,6 +374,16 @@ export function MarketsStep() {
     setActiveIdx(next.findIndex((b) => b.startAge === mid) + 1)
   }
 
+  const applyHistoricalDefaults = () => {
+    patchInputs({
+      initialStockGrowthMin: HISTORICAL_MARKET_DEFAULTS.stockGrowthMin,
+      initialStockGrowthMax: HISTORICAL_MARKET_DEFAULTS.stockGrowthMax,
+      initialInflationMin: HISTORICAL_MARKET_DEFAULTS.inflationMin,
+      initialInflationMax: HISTORICAL_MARKET_DEFAULTS.inflationMax,
+    })
+    setActiveIdx(0)
+  }
+
   const shiftBreakpoint = (bpIdx: number, delta: number) => {
     const cur = inputs.breakpoints[bpIdx]
     if (!cur) return
@@ -391,9 +402,19 @@ export function MarketsStep() {
         <h1>Set return and inflation assumptions</h1>
       </div>
 
-      <p className="muted" style={{ fontSize: 14, marginBottom: 20, maxWidth: 640 }}>
-        Drag in a breakpoint when your assumptions should change — common pattern: lower growth post-retirement.
-      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, flexWrap: 'wrap' }}>
+        <p className="muted" style={{ fontSize: 14, margin: 0, maxWidth: 640 }}>
+          Drag in a breakpoint when your assumptions should change — common pattern: lower growth post-retirement.
+        </p>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={applyHistoricalDefaults}
+          title="Set the initial segment to long-run historical nominal returns and inflation"
+        >
+          Use historical defaults
+        </button>
+      </div>
 
       <BreakpointsTimeline
         segments={segments}
