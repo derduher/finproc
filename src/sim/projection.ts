@@ -64,6 +64,29 @@ export function runSingleProjection(
 
   const simAccounts = accounts.map((a) => new SimAccount(a, 0))
 
+  // RMD reinvestment sink: forced RMDs beyond spending need are reinvested as
+  // after-tax cash in a taxable account (spec §3.4) rather than destroyed. Reuse an
+  // existing taxable account if present; otherwise create one lazily on first use.
+  let reinvestTarget: SimAccount | undefined = simAccounts.find((a) => a.type === 'taxable')
+  const rmdSink = (): SimAccount => {
+    if (!reinvestTarget) {
+      reinvestTarget = new SimAccount({
+        id: '__rmd_reinvest',
+        name: 'RMD reinvestment',
+        type: 'taxable',
+        balance: 0,
+        costBasis: 0,
+        contributionAmount: 0,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+        contributionEndAge: 0,
+        withdrawalStartAge: 0,
+      })
+      simAccounts.push(reinvestTarget)
+    }
+    return reinvestTarget
+  }
+
   const startAge = person.currentAge
   const maxAge = person.maxAge
   const years = maxAge - startAge
@@ -160,26 +183,41 @@ export function runSingleProjection(
       // Disposable income from salary during working years.
       // The user's salary covers expenses while they're still employed
       // (proxy: until the latest contributionEndAge across all accounts).
-      // We subtract:
-      //   - Income tax (approximated by the flat marginal rate)
-      //   - Account contributions (already deducted from salary by `contribute()`)
-      // Simplification: traditional contributions aren't separately tax-deferred —
-      // they're treated as if paid from after-tax income (slightly conservative).
+      //
+      // Cash flow of a paycheck:
+      //   - Traditional employee contributions are PRE-TAX — they leave the
+      //     paycheck before income tax and reduce taxable income.
+      //   - Roth / taxable employee contributions are AFTER-TAX — paid from
+      //     take-home pay.
+      //   - The employer match is NOT paid from salary at all, so it never
+      //     reduces take-home.
+      //
+      //   take-home = (salary − preTaxContrib) × (1 − marginalRate) − afterTaxContrib
       let disposableIncome = 0
       if (yearStartAge < effectiveRetirementAge) {
-        const afterTaxSalary = annualSalary * (1 - person.marginalTaxRate)
-        let yearContributions = 0
+        let preTaxContrib = 0 // traditional employee contributions
+        let afterTaxContrib = 0 // roth + taxable employee contributions
         for (const acc of simAccounts) {
-          yearContributions += acc.annualContribution(yearStartAge, annualSalary)
+          const employee = acc.annualEmployeeContribution(yearStartAge, annualSalary)
+          if (acc.type === 'traditional') preTaxContrib += employee
+          else afterTaxContrib += employee
         }
-        disposableIncome = Math.max(0, afterTaxSalary - yearContributions)
+        const taxableSalary = Math.max(0, annualSalary - preTaxContrib)
+        const afterTaxSalary = taxableSalary * (1 - person.marginalTaxRate)
+        disposableIncome = Math.max(0, afterTaxSalary - afterTaxContrib)
       }
 
       const netNeed = Math.max(0, inflatedExpenses + oneTimeTotal - ssIncome - disposableIncome)
 
+      // Per-account balance before any withdrawals this year — used both to size
+      // RMDs (a floor based on the start-of-year balance) and to measure spending.
+      const balBeforeWithdrawal: Record<string, number> = {}
+      for (const acc of simAccounts) balBeforeWithdrawal[acc.id] = acc.getBalance()
+      const balBeforeExpense = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
+
+      let shortfall = 0
       if (netNeed > 0) {
-        const balBefore = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
-        let shortfall = makeWithdrawals(
+        shortfall = makeWithdrawals(
           simAccounts,
           netNeed,
           yearStartAge,
@@ -208,40 +246,54 @@ export function runSingleProjection(
             true,
           )
         }
+      }
 
-        // RMDs: forced withdrawal from traditional accounts at age 73+
+      // Spending withdrawals = drop in portfolio from funding expenses (pre-RMD).
+      const balAfterExpense = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
+      withdrawalsThisYear = Math.max(0, balBeforeExpense - balAfterExpense)
+
+      // Use a small threshold to avoid false positives from floating-point
+      // rounding in the gross-up round-trip (e.g. net/rate*rate ≠ net exactly).
+      //
+      // Real depletion requires that there's an actual unmet need AND no
+      // available portfolio to cover it. We treat a shortfall as depletion
+      // only when the total portfolio is below the unmet need — otherwise
+      // it's a temporary lockout (e.g. money exists but withdrawalStartAge
+      // hasn't been reached) and the simulation continues. RMDs are excluded
+      // from this judgment — a forced distribution never causes failure.
+      if (shortfall > 0.01 && balAfterExpense < shortfall - 0.01) {
+        depleted = true
+        depleteAge = yearEndAge
+        succeeded = false
+        contributionsThisYear = 0
+        socialSecurityThisYear = 0
+        // Spec §3.3: portfolio remains at zero for the remainder of the projection.
+        for (const acc of simAccounts) {
+          acc.zero()
+        }
+      }
+
+      // RMDs (spec §3.4): at age 73+, each traditional account must distribute at
+      // least balance/divisor. Withdrawals already taken this year count toward the
+      // RMD floor; only the remaining shortfall is forced out. Proceeds beyond
+      // spending need are taxed at the marginal rate and the after-tax remainder is
+      // reinvested in taxable — never destroyed. Runs regardless of spending need.
+      if (!depleted) {
         const divisor = rmdDivisor(yearStartAge)
         if (divisor !== undefined) {
-          for (const acc of simAccounts) {
-            if (acc.type === 'traditional' && acc.getBalance() > 0) {
-              const rmd = acc.getBalance() / divisor
-              // If strategy already withdrew enough, no additional action needed.
-              // If not, force the shortfall out of traditional (added to taxable bucket).
-              // Per spec: conservative approach — just withdraw the RMD minimum.
-              acc.withdraw(rmd, yearStartAge)
-            }
-          }
-        }
-
-        // Use a small threshold to avoid false positives from floating-point
-        // rounding in the gross-up round-trip (e.g. net/rate*rate ≠ net exactly).
-        //
-        // Real depletion requires that there's an actual unmet need AND no
-        // available portfolio to cover it. We treat a shortfall as depletion
-        // only when the total portfolio is below the unmet need — otherwise
-        // it's a temporary lockout (e.g. money exists but withdrawalStartAge
-        // hasn't been reached) and the simulation continues.
-        const totalAvailable = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
-        withdrawalsThisYear = Math.max(0, balBefore - totalAvailable)
-        if (shortfall > 0.01 && totalAvailable < shortfall - 0.01) {
-          depleted = true
-          depleteAge = yearEndAge
-          succeeded = false
-          contributionsThisYear = 0
-          socialSecurityThisYear = 0
-          // Spec §3.3: portfolio remains at zero for the remainder of the projection.
-          for (const acc of simAccounts) {
-            acc.zero()
+          // Snapshot traditional accounts so lazily creating the sink (which pushes
+          // onto simAccounts) doesn't perturb iteration.
+          const tradAccounts = simAccounts.filter((a) => a.type === 'traditional')
+          for (const acc of tradAccounts) {
+            const base = balBeforeWithdrawal[acc.id] ?? acc.getBalance()
+            const required = base / divisor
+            const alreadyWithdrawn = base - acc.getBalance()
+            const force = Math.max(0, required - alreadyWithdrawn)
+            if (force <= 0 || acc.getBalance() <= 0) continue
+            const gross = acc.withdraw(force, yearStartAge)
+            if (gross <= 0) continue
+            const net = gross * (1 - person.marginalTaxRate)
+            rmdSink().deposit(net)
           }
         }
       }

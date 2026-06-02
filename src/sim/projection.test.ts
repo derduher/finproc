@@ -487,3 +487,155 @@ describe('runSingleProjection — multi-account withdrawal NaN safety', () => {
     }
   })
 })
+
+describe('runSingleProjection — RMDs (bug #3: cash must not evaporate)', () => {
+  it('forces an RMD at 73 even with zero spending need, and only the tax leaves the portfolio', () => {
+    const marginalTaxRate = 0.25
+    const result = runSingleProjection(
+      inputs({
+        accounts: [{
+          id: 'trad', name: 'Trad', type: 'traditional',
+          balance: 1_000_000,
+          contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+          contributionEndAge: 73, withdrawalStartAge: 60,
+        }],
+        annualExpenses: 0,
+        socialSecurity: undefined,
+        oneTimeExpenses: [],
+        person: {
+          ...defaultInputs().person,
+          currentAge: 73, maxAge: 74, annualSalary: 0,
+          marginalTaxRate, retirementAge: 73,
+        },
+      }),
+      ZERO_RATES,
+    )
+    const divisor = 26.5 // IRS Uniform Lifetime Table, age 73
+    const rmd = 1_000_000 / divisor
+    const tax = rmd * marginalTaxRate
+    // The RMD is forced out of the traditional account but the net proceeds are
+    // reinvested (not destroyed): the portfolio shrinks only by the tax paid.
+    const expectedTotal = 1_000_000 - tax
+    const last = result.yearlyResults.at(-1)!
+    expect(last.totalBalance).toBeCloseTo(expectedTotal, -1)
+    // Sanity: it neither skipped the RMD (would be 1,000,000) nor destroyed it
+    // (would be 1,000,000 - rmd).
+    expect(last.totalBalance).toBeLessThan(1_000_000 - 1)
+    expect(last.totalBalance).toBeGreaterThan(1_000_000 - rmd + 1)
+  })
+
+  it('reinvests RMD proceeds into an existing taxable account (no synthetic sink)', () => {
+    const marginalTaxRate = 0.25
+    const result = runSingleProjection(
+      inputs({
+        accounts: [
+          {
+            id: 'trad', name: 'Trad', type: 'traditional',
+            balance: 1_000_000,
+            contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+            contributionEndAge: 73, withdrawalStartAge: 60,
+          },
+          {
+            id: 'brok', name: 'Brokerage', type: 'taxable',
+            balance: 100_000, costBasis: 100_000,
+            contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+            contributionEndAge: 73, withdrawalStartAge: 60,
+          },
+        ],
+        annualExpenses: 0,
+        socialSecurity: undefined,
+        oneTimeExpenses: [],
+        person: {
+          ...defaultInputs().person,
+          currentAge: 73, maxAge: 74, annualSalary: 0,
+          marginalTaxRate, retirementAge: 73,
+        },
+      }),
+      ZERO_RATES,
+    )
+    const rmd = 1_000_000 / 26.5
+    const net = rmd * (1 - marginalTaxRate)
+    const yr = result.yearlyResults.at(-1)!
+    // Net proceeds land in the user's existing brokerage, not a synthetic account.
+    expect(yr.accountBalances['brok']).toBeCloseTo(100_000 + net, -1)
+    expect(yr.accountBalances['trad']).toBeCloseTo(1_000_000 - rmd, -1)
+    expect(yr.accountBalances['__rmd_reinvest']).toBeUndefined()
+  })
+})
+
+describe('runSingleProjection — working-years cash flow', () => {
+  it('bug #4: employer match must not reduce take-home pay (no phantom withdrawals)', () => {
+    const result = runSingleProjection(
+      inputs({
+        accounts: [
+          {
+            id: 'k', name: '401k', type: 'traditional',
+            balance: 0,
+            contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+            contributionEndAge: 41, withdrawalStartAge: 60,
+            employerMatch: { type: 'flat', annualAmount: 10_000 },
+          },
+          {
+            id: 'tax', name: 'Taxable', type: 'taxable',
+            balance: 50_000, costBasis: 50_000,
+            contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+            contributionEndAge: 41, withdrawalStartAge: 40,
+          },
+        ],
+        annualExpenses: 75_000, // exactly covered by after-tax salary, zero margin
+        socialSecurity: undefined,
+        oneTimeExpenses: [],
+        person: {
+          ...defaultInputs().person,
+          currentAge: 40, maxAge: 41, annualSalary: 100_000,
+          marginalTaxRate: 0.25, salaryGrowthRate: 0, retirementAge: 41,
+        },
+      }),
+      ZERO_RATES,
+    )
+    const yr = result.yearlyResults.at(-1)!
+    // After-tax salary (100k × 0.75 = 75k) exactly covers 75k expenses, so the
+    // taxable account is untouched and the $10k match lands in the 401k.
+    expect(yr.accountBalances['tax']).toBeCloseTo(50_000, -1)
+    expect(yr.accountBalances['k']).toBeCloseTo(10_000, -1)
+    expect(yr.withdrawals).toBeCloseTo(0, -1)
+  })
+
+  it('bug #5: traditional contributions are pre-tax (reduce taxable income)', () => {
+    const tradAnnual = 20_000
+    const result = runSingleProjection(
+      inputs({
+        accounts: [
+          {
+            id: 'k', name: '401k', type: 'traditional',
+            balance: 0,
+            contributionAmount: tradAnnual / 12, contributionType: 'flat', contributionFrequency: 'monthly',
+            contributionEndAge: 41, withdrawalStartAge: 60,
+          },
+          {
+            id: 'tax', name: 'Taxable', type: 'taxable',
+            balance: 50_000, costBasis: 50_000,
+            contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+            contributionEndAge: 41, withdrawalStartAge: 40,
+          },
+        ],
+        // Take-home with pre-tax 401k = (100k − 20k) × 0.75 = 60k, exactly covering
+        // expenses. If the 401k were (wrongly) taxed, take-home would be only 55k
+        // and the taxable account would be tapped for the 5k gap.
+        annualExpenses: 60_000,
+        socialSecurity: undefined,
+        oneTimeExpenses: [],
+        person: {
+          ...defaultInputs().person,
+          currentAge: 40, maxAge: 41, annualSalary: 100_000,
+          marginalTaxRate: 0.25, salaryGrowthRate: 0, retirementAge: 41,
+        },
+      }),
+      ZERO_RATES,
+    )
+    const yr = result.yearlyResults.at(-1)!
+    expect(yr.accountBalances['tax']).toBeCloseTo(50_000, -1)
+    expect(yr.accountBalances['k']).toBeCloseTo(tradAnnual, -1)
+    expect(yr.withdrawals).toBeCloseTo(0, -1)
+  })
+})

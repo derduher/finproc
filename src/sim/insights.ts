@@ -9,6 +9,7 @@
  * or bumped retirement age) — these use a small `runCount` for speed.
  */
 import { runMonteCarlo } from './montecarlo'
+import { monteCarloDeltaSignificant } from '../math'
 import { WithdrawalStrategy } from '../schema'
 import type { SimulationInputs } from '../schema'
 import type { MonteCarloResult } from './montecarlo'
@@ -23,7 +24,13 @@ export interface Insight {
 }
 
 export interface InsightOptions {
-  /** MC runs per rule that needs a re-projection (default 100). */
+  /**
+   * MC runs per rule that needs a re-projection (default 1000). The comparative
+   * rules diff this against `baseline.successRate`, so for a clean paired
+   * comparison the baseline should be computed at the same resolution. At 100
+   * runs the seed-to-seed noise (~6pp) swamps the effects these rules report
+   * (~2–7pp), which is why the default is 1000 and each delta is significance-gated.
+   */
   runCount?: number
 }
 
@@ -45,6 +52,10 @@ const taxOptimalRule: Rule = (inputs, baseline, runCount) => {
     runCount,
     inputs.seed,
   )
+  // Don't claim an edge we can't distinguish from Monte Carlo noise at this run
+  // count (bug #6). Require both a practical floor (≥2pp) and statistical
+  // significance vs sampling error.
+  if (!monteCarloDeltaSignificant(baseline.successRate, alt.successRate, runCount)) return null
   const deltaPct = Math.round((baseline.successRate - alt.successRate) * 100)
   if (deltaPct < 2) return null
   return {
@@ -79,6 +90,8 @@ const retireOneYearLaterRule: Rule = (inputs, baseline, runCount) => {
     })),
   }
   const alt = runMonteCarlo(bumped, runCount, inputs.seed)
+  // Suppress noise-level deltas (bug #6): require statistical significance.
+  if (!monteCarloDeltaSignificant(baseline.successRate, alt.successRate, runCount)) return null
   const deltaPct = Math.round((alt.successRate - baseline.successRate) * 100)
   if (deltaPct < 2) return null
   const baselinePct = Math.round(baseline.successRate * 100)
@@ -98,7 +111,7 @@ export function computeInsights(
   baseline: MonteCarloResult,
   opts: InsightOptions = {},
 ): Insight[] {
-  const runCount = opts.runCount ?? 100
+  const runCount = opts.runCount ?? 1000
   return RULES.map((rule) => rule(inputs, baseline, runCount)).filter(
     (i): i is Insight => i !== null,
   )

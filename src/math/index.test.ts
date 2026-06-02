@@ -11,6 +11,7 @@ import {
   traditionalWithdrawalGrossUp,
   formatMoneyAbbreviated,
   p10p90ToSigma,
+  monteCarloDeltaSignificant,
 } from './index'
 
 describe('annualToMonthlyRate', () => {
@@ -239,5 +240,32 @@ describe('p10p90ToSigma', () => {
     const sigma = p10p90ToSigma(0.04, 0.10)
     // P10 ≈ mean - 1.28σ, P90 ≈ mean + 1.28σ for normal distribution
     expect(sigma).toBeCloseTo((0.10 - 0.04) / (2 * 1.2816), 3)
+  })
+})
+
+describe('monteCarloDeltaSignificant', () => {
+  it('treats a 2pp success-rate gap at 100 runs as noise (not significant)', () => {
+    expect(monteCarloDeltaSignificant(0.6, 0.62, 100)).toBe(false)
+  })
+
+  it('treats a large gap (50% vs 70%) at 1000 runs as significant', () => {
+    expect(monteCarloDeltaSignificant(0.5, 0.7, 1000)).toBe(true)
+  })
+
+  it('a 2pp gap is still noise even at 1000 runs (conservative)', () => {
+    expect(monteCarloDeltaSignificant(0.6, 0.62, 1000)).toBe(false)
+  })
+
+  it('a 7pp gap at 1000 runs is significant (real strategy effect survives)', () => {
+    expect(monteCarloDeltaSignificant(0.6, 0.53, 1000)).toBe(true)
+  })
+
+  it('zero delta is never significant', () => {
+    expect(monteCarloDeltaSignificant(0.6, 0.6, 1000)).toBe(false)
+  })
+
+  it('more runs make a fixed gap easier to detect (monotonic in n)', () => {
+    expect(monteCarloDeltaSignificant(0.6, 0.66, 100)).toBe(false)
+    expect(monteCarloDeltaSignificant(0.6, 0.66, 1000)).toBe(true)
   })
 })

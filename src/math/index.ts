@@ -105,6 +105,35 @@ export function p10p90ToMean(p10: number, p90: number): number {
   return (p10 + p90) / 2
 }
 
+// ─── Monte Carlo significance ─────────────────────────────────────────────────
+
+/**
+ * Is the difference between two Monte Carlo success rates large enough to be
+ * distinguishable from sampling noise, rather than an artifact of running only
+ * `n` trials?
+ *
+ * Treats each rate as a binomial proportion with standard error √(p(1−p)/n) and
+ * requires |rateA − rateB| to exceed `z` standard errors of the difference
+ * (default z = 1.96 ≈ 95% confidence). The two samples are treated as
+ * independent, which is deliberately conservative: insights/sensitivity reuse the
+ * same seed (common random numbers), so the true paired noise is smaller — a gate
+ * that clears the independent bar is safely real. Prefer false negatives (don't
+ * claim an effect) over false positives (claim noise as signal).
+ */
+export function monteCarloDeltaSignificant(
+  rateA: number,
+  rateB: number,
+  n: number,
+  z = 1.96,
+): boolean {
+  if (n <= 0) return false
+  const seA = Math.sqrt((rateA * (1 - rateA)) / n)
+  const seB = Math.sqrt((rateB * (1 - rateB)) / n)
+  const seDiff = Math.sqrt(seA * seA + seB * seB)
+  if (seDiff === 0) return Math.abs(rateA - rateB) > 0
+  return Math.abs(rateA - rateB) > z * seDiff
+}
+
 // ─── Percentile ───────────────────────────────────────────────────────────────
 
 /**

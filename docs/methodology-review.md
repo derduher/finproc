@@ -41,20 +41,22 @@ a fictional $34M — is the symptom that drives most of the findings below.
 
 ## Priority summary
 
-| # | Pri | Finding | Goal hit | Effort |
-|---|-----|---------|----------|--------|
-| 1 | **P0** | One return draw per run → no sequence-of-returns risk; fake fat right tail | Accuracy, Risk | L |
-| 2 | **P0** | Binary "success rate" hides magnitude + timing of failure and rewards over-saving | Risk, Transparency | M (sim) / L (UX) |
-| 3 | **P1** | RMD cash is destroyed, not spent/reinvested; RMD block gated behind `netNeed>0` | Accuracy | S |
-| 4 | **P1** | Employer match wrongly subtracted from take-home pre-retirement | Accuracy | S |
-| 5 | **P1** | Traditional dollars effectively double-taxed (contrib not pre-tax, then grossed-up on exit) | Accuracy | M |
-| 6 | **P1** | Insights @100 runs / sensitivity @200–400 runs report deltas inside MC noise | Risk, Transparency | S |
-| 7 | **P2** | "Retirement age" tornado bar actually perturbs `currentAge`; contribution-amount row missing | Transparency | S |
-| 8 | **P2** | Flat marginal tax, SS tax-free, no 0% LTCG bracket, no bracket-filling | Accuracy | M |
-| 9 | **P2** | Independent inflation/return sampling; no valuation-aware starting return | Accuracy | M |
-| 10 | **P2** | Deterministic `maxAge` = no longevity risk distribution | Risk | M |
-| 11 | **P2** | Flat-real lifetime spending; no dynamic/guardrail withdrawals | Accuracy, Risk | M |
-| 12 | **P3** | Frozen nominal IRS limits, no catch-up; mid-month convention not implemented | Accuracy | S |
+Status legend: ✅ done · ⬜ not started.
+
+| # | Pri | Status | Finding | Goal hit | Effort |
+|---|-----|--------|---------|----------|--------|
+| 1 | **P0** | ⬜ | One return draw per run → no sequence-of-returns risk; fake fat right tail | Accuracy, Risk | L |
+| 2 | **P0** | ⬜ | Binary "success rate" hides magnitude + timing of failure and rewards over-saving | Risk, Transparency | M (sim) / L (UX) |
+| 3 | **P1** | ✅ | RMD cash is destroyed, not spent/reinvested; RMD block gated behind `netNeed>0` | Accuracy | S |
+| 4 | **P1** | ✅ | Employer match wrongly subtracted from take-home pre-retirement | Accuracy | S |
+| 5 | **P1** | ✅ | Traditional dollars effectively double-taxed (contrib not pre-tax, then grossed-up on exit) | Accuracy | M |
+| 6 | **P1** | ✅ | Insights @100 runs / sensitivity @200–400 runs report deltas inside MC noise | Risk, Transparency | S |
+| 7 | **P2** | ⬜ | "Retirement age" tornado bar actually perturbs `currentAge`; contribution-amount row missing | Transparency | S |
+| 8 | **P2** | ⬜ | Flat marginal tax, SS tax-free, no 0% LTCG bracket, no bracket-filling | Accuracy | M |
+| 9 | **P2** | ⬜ | Independent inflation/return sampling; no valuation-aware starting return | Accuracy | M |
+| 10 | **P2** | ⬜ | Deterministic `maxAge` = no longevity risk distribution | Risk | M |
+| 11 | **P2** | ⬜ | Flat-real lifetime spending; no dynamic/guardrail withdrawals | Accuracy, Risk | M |
+| 12 | **P3** | ⬜ | Frozen nominal IRS limits, no catch-up; mid-month convention not implemented | Accuracy | S |
 
 Effort: S ≈ <½ day, M ≈ 1–3 days, L ≈ multi-day with test rework.
 
