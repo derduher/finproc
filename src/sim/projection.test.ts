@@ -563,6 +563,58 @@ describe('runSingleProjection — RMDs (bug #3: cash must not evaporate)', () =>
   })
 })
 
+describe('runSingleProjection — per-year rate schedule (P0 #1)', () => {
+  const rothInputs = (overrides = {}) =>
+    inputs({
+      person: { ...defaultInputs().person, currentAge: 65, maxAge: 70, annualSalary: 0 },
+      accounts: [{
+        id: 'a', name: 'Roth', type: 'roth',
+        balance: 100_000,
+        contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+        contributionEndAge: 65, withdrawalStartAge: 65,
+      }],
+      annualExpenses: 0,
+      socialSecurity: undefined,
+      oneTimeExpenses: [],
+      ...overrides,
+    })
+
+  it('applies a different rate each year from a per-year schedule', () => {
+    // Year 0 grows 10%, year 1 flat — no withdrawals.
+    const result = runSingleProjection(rothInputs({
+      person: { ...defaultInputs().person, currentAge: 65, maxAge: 67, annualSalary: 0 },
+    }), [
+      { stockGrowth: 0.10, inflation: 0 },
+      { stockGrowth: 0.0, inflation: 0 },
+    ])
+    const y0 = result.yearlyResults[0].totalBalance
+    const y1 = result.yearlyResults[1].totalBalance
+    const oneYearAt10 = 100_000 * Math.pow(1 + Math.pow(1.10, 1 / 12) - 1, 12)
+    expect(y0).toBeCloseTo(oneYearAt10, -2) // ~110,000 after the 10% year
+    expect(y1).toBeCloseTo(y0, -2) // flat year leaves it ~unchanged
+  })
+
+  it('models sequence-of-returns risk: order of the same returns changes outcomes', () => {
+    // Identical multiset of annual returns, reversed. With withdrawals, a bad
+    // early sequence permanently damages the portfolio vs. a good early sequence.
+    const goodEarly = [0.5, 0.5, -0.4, -0.4, 0.0].map((g) => ({ stockGrowth: g, inflation: 0 }))
+    const badEarly = [...goodEarly].reverse()
+    // Modest withdrawal so neither path fully depletes (a zeroed portfolio would
+    // erase the difference) — the gap then shows up in the ending balance.
+    const withdraw = { annualExpenses: 10_000 }
+
+    const good = runSingleProjection(rothInputs(withdraw), goodEarly)
+    const bad = runSingleProjection(rothInputs(withdraw), badEarly)
+
+    const goodEnd = good.yearlyResults.at(-1)!.totalBalance
+    const badEnd = bad.yearlyResults.at(-1)!.totalBalance
+    // Same average return, different order → different ending balance (the whole
+    // point of restoring sequence risk), with the bad-early path worse off.
+    expect(goodEnd).not.toBeCloseTo(badEnd, -2)
+    expect(badEnd).toBeLessThan(goodEnd)
+  })
+})
+
 describe('runSingleProjection — working-years cash flow', () => {
   it('bug #4: employer match must not reduce take-home pay (no phantom withdrawals)', () => {
     const result = runSingleProjection(
