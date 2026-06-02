@@ -37,20 +37,30 @@ export interface ProjectionResult {
 
 /**
  * Run a single deterministic projection with pre-sampled growth/inflation rates.
- * The `rates` object holds the rates for the INITIAL segment.
  *
- * If `breakpointRates` is provided, index k supplies the rates for the k-th
- * entry in `inputs.breakpoints` (each one takes effect from `startAge` onward,
- * superseding earlier segments). When omitted, the initial `rates` apply for
- * the entire projection — preserving the pre-segment-aware call shape.
+ * `rates` accepts two shapes:
+ *  - **A single `SampledRates`** — one constant rate for the INITIAL segment. If
+ *    `breakpointRates` is also provided, index k supplies the rates for the k-th
+ *    entry in `inputs.breakpoints` (each takes effect from its `startAge` onward,
+ *    superseding earlier segments). This is the deterministic known-answer shape
+ *    used by unit tests.
+ *  - **An array `SampledRates[]`** — a per-year schedule: year `y` (age
+ *    `currentAge + y`) uses `rates[y]`, so returns and inflation vary year to year.
+ *    This is what Monte Carlo passes, and it's what makes sequence-of-returns risk
+ *    representable. The array form supersedes `breakpoints`/`breakpointRates`
+ *    (the schedule already encodes segment-aware draws). A short array reuses its
+ *    last entry defensively.
  *
- * For Monte Carlo: call this 1,000 times with different sampled rates.
+ * For Monte Carlo: call this 1,000 times with different sampled schedules.
  */
 export function runSingleProjection(
   inputs: SimulationInputs,
-  rates: SampledRates,
+  rates: SampledRates | SampledRates[],
   breakpointRates?: SampledRates[],
 ): ProjectionResult {
+  // Per-year schedule vs. single constant rate (with optional breakpoint segments).
+  const yearlyRates = Array.isArray(rates) ? rates : undefined
+  const constantRates = Array.isArray(rates) ? rates[rates.length - 1] : rates
   const {
     person,
     accounts,
@@ -107,18 +117,27 @@ export function runSingleProjection(
     const yearStartAge = startAge + y
     const yearEndAge = startAge + y + 1
 
-    // Determine active rates for this year. Each breakpoint that has already
-    // started supersedes earlier segments; the latest applicable wins. If
-    // breakpointRates wasn't provided, the initial rates apply throughout
-    // (back-compat with single-segment callers).
-    let growthRate = rates.stockGrowth
-    let inflationRate = rates.inflation
-    for (let k = 0; k < breakpoints.length; k++) {
-      if (yearStartAge >= breakpoints[k].startAge) {
-        const r = breakpointRates?.[k]
-        if (r !== undefined) {
-          growthRate = r.stockGrowth
-          inflationRate = r.inflation
+    // Determine active rates for this year.
+    let growthRate: number
+    let inflationRate: number
+    if (yearlyRates) {
+      // Per-year schedule: year y uses rates[y] (reuse the last entry if short).
+      const r = yearlyRates[Math.min(y, yearlyRates.length - 1)]
+      growthRate = r.stockGrowth
+      inflationRate = r.inflation
+    } else {
+      // Single constant rate, optionally superseded by breakpoint segments. Each
+      // breakpoint that has already started wins; the latest applicable one
+      // applies. Without breakpointRates the initial rates apply throughout.
+      growthRate = constantRates.stockGrowth
+      inflationRate = constantRates.inflation
+      for (let k = 0; k < breakpoints.length; k++) {
+        if (yearStartAge >= breakpoints[k].startAge) {
+          const r = breakpointRates?.[k]
+          if (r !== undefined) {
+            growthRate = r.stockGrowth
+            inflationRate = r.inflation
+          }
         }
       }
     }

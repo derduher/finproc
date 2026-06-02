@@ -45,7 +45,8 @@ Status legend: ✅ done · ⬜ not started.
 
 | # | Pri | Status | Finding | Goal hit | Effort |
 |---|-----|--------|---------|----------|--------|
-| 1 | **P0** | ⬜ | One return draw per run → no sequence-of-returns risk; fake fat right tail | Accuracy, Risk | L |
+| 1 | **P0** | ✅ (IID) | One return draw per run → no sequence-of-returns risk; fake fat right tail. **Done: per-year IID sampling.** Block-bootstrap is the remaining refinement (#1b). | Accuracy, Risk | L |
+| 1b | **P1** | ⬜ | Per-year draws are IID — no autocorrelation/volatility-clustering. Upgrade to block-bootstrap so crashes persist across consecutive years (the schedule shape already supports it). | Accuracy, Risk | M |
 | 2 | **P0** | ⬜ | Binary "success rate" hides magnitude + timing of failure and rewards over-saving | Risk, Transparency | M (sim) / L (UX) |
 | 3 | **P1** | ✅ | RMD cash is destroyed, not spent/reinvested; RMD block gated behind `netNeed>0` | Accuracy | S |
 | 4 | **P1** | ✅ | Employer match wrongly subtracted from take-home pre-retirement | Accuracy | S |
@@ -103,6 +104,25 @@ single-draw path available behind a flag for the determinism-pin tests during mi
 **UX implication.** Once paths can be bad, the fan chart should optionally show a few **example
 paths** (including a bad-sequence one), not just smoothed bands. Add an assumption tooltip:
 "returns vary year to year; early losses hurt more than late ones."
+
+**✅ Done (per-year IID).** Monte Carlo now draws an independent return + inflation for each
+year from that year's active segment ([`montecarlo.ts` `buildSegments`/`activeSegment`](../src/sim/montecarlo.ts)),
+and `runSingleProjection` consumes a per-year `SampledRates[]` schedule
+([`projection.ts`](../src/sim/projection.ts)). Sequence-of-returns risk is now representable —
+proven by a projection test where the same returns in reversed order produce different outcomes.
+Impact on the reference scenario (40yo, retire 65, $80k expenses):
+
+| | Single-draw (before) | Per-year (now) |
+|---|---|---|
+| Age-95 P90 | $34.4M (fiction) | $5.5M |
+| Age-65 band width | 3.0× | 1.1× (accumulation averages out) |
+| Median depletion age | 83 | 92 |
+
+The band is now narrow during accumulation and widens through retirement — the correct shape.
+**Caveat:** draws are IID, so there's no autocorrelation/volatility-clustering yet; IID actually
+*understates* sequence risk vs. real markets (crashes don't persist across years). Block-bootstrap
+is the follow-up (#1b) — the per-year schedule shape was built to accept it without touching the
+projection.
 
 ---
 

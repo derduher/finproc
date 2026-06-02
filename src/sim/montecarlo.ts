@@ -1,4 +1,5 @@
 import { runSingleProjection } from './projection'
+import type { SampledRates } from './projection'
 import { aggregateCashflows } from './cashflow'
 import { mulberry32, boxMullerNormal, p10p90ToMean, p10p90ToSigma, percentile } from '../math'
 import type { SimulationInputs } from '../schema'
@@ -58,15 +59,13 @@ export function runMonteCarlo(
   const rng = mulberry32(baseSeed)
   onProgress?.({ stage: 'sample', done: 1, total: 1 })
 
-  const {
-    initialStockGrowthMin,
-    initialStockGrowthMax,
-    initialInflationMin,
-    initialInflationMax,
-    person,
-  } = inputs
-
+  const { person } = inputs
   const years = person.maxAge - person.currentAge
+
+  // Precompute the return/inflation distribution for each rate segment, tagged
+  // with the age it takes effect. Each simulated year draws from whichever
+  // segment is active that year (see `activeSegment`).
+  const segments = buildSegments(inputs)
 
   // Accumulators: for each year, collect all runs' total balances
   const balancesByYear: number[][] = Array.from({ length: years }, () => [])
@@ -82,23 +81,22 @@ export function runMonteCarlo(
     if (onProgress && (run % projectInterval === 0 || run === runCount - 1)) {
       onProgress({ stage: 'project', done: run, total: runCount })
     }
-    // Sample rates for the initial segment
-    const initGrowthMean = p10p90ToMean(initialStockGrowthMin, initialStockGrowthMax)
-    const initGrowthSigma = p10p90ToSigma(initialStockGrowthMin, initialStockGrowthMax)
-    const initInflationMean = p10p90ToMean(initialInflationMin, initialInflationMax)
-    const initInflationSigma = p10p90ToSigma(initialInflationMin, initialInflationMax)
-
-    const sampledGrowth = boxMullerNormal(initGrowthMean, initGrowthSigma, rng)
-    const sampledInflation = boxMullerNormal(initInflationMean, initInflationSigma, rng)
-
-    // For breakpoint segments, sample rates but store for later use per-year
-    // We pre-sample all breakpoint rates for this run before running the projection.
-    // The projection.ts code currently uses the passed rates for ALL years (ignoring
-    // breakpoints internally). For true per-segment MC, we run the projection
-    // year-by-year here instead.
-    //
-    // Simple approach: run each segment separately and stitch results.
-    const result = runSegmentedProjection(inputs, sampledGrowth, sampledInflation, rng)
+    // Build a per-year rate schedule: each year draws an independent return and
+    // inflation from its active segment's distribution. This is what restores
+    // sequence-of-returns risk — a bad draw early in retirement is no longer
+    // indistinguishable from the same average spread out over the whole horizon.
+    // (Drawing a fresh value per year, rather than blocks of correlated years, is
+    // the documented IID simplification; the schedule shape leaves room to swap in
+    // a block-bootstrap sampler later without touching the projection.)
+    const yearlyRates: SampledRates[] = new Array(years)
+    for (let y = 0; y < years; y++) {
+      const seg = activeSegment(segments, person.currentAge + y)
+      yearlyRates[y] = {
+        stockGrowth: boxMullerNormal(seg.growthMean, seg.growthSigma, rng),
+        inflation: boxMullerNormal(seg.inflationMean, seg.inflationSigma, rng),
+      }
+    }
+    const result = runSingleProjection(inputs, yearlyRates)
 
     if (result.succeeded) {
       successCount++
@@ -142,59 +140,44 @@ export function runMonteCarlo(
   return result
 }
 
+/** A rate segment's distribution params plus the age from which it applies. */
+interface RateSegment {
+  startAge: number
+  growthMean: number
+  growthSigma: number
+  inflationMean: number
+  inflationSigma: number
+}
+
 /**
- * Run a single projection with per-segment rate sampling.
- * For each breakpoint segment, draws fresh rates from the PRNG.
- * The initial segment uses the pre-sampled rates passed in.
+ * Build the list of rate segments (initial + each breakpoint), sorted ascending
+ * by the age they take effect. The initial segment applies from `currentAge`;
+ * each breakpoint supersedes earlier ones from its `startAge` onward.
  */
-function runSegmentedProjection(
-  inputs: SimulationInputs,
-  initialGrowth: number,
-  initialInflation: number,
-  rng: () => number,
-): ReturnType<typeof runSingleProjection> {
-  const { breakpoints } = inputs
-
-  if (breakpoints.length === 0) {
-    // No breakpoints: single segment
-    return runSingleProjection(inputs, {
-      stockGrowth: initialGrowth,
-      inflation: initialInflation,
-    })
+function buildSegments(inputs: SimulationInputs): RateSegment[] {
+  const initial: RateSegment = {
+    startAge: inputs.person.currentAge,
+    growthMean: p10p90ToMean(inputs.initialStockGrowthMin, inputs.initialStockGrowthMax),
+    growthSigma: p10p90ToSigma(inputs.initialStockGrowthMin, inputs.initialStockGrowthMax),
+    inflationMean: p10p90ToMean(inputs.initialInflationMin, inputs.initialInflationMax),
+    inflationSigma: p10p90ToSigma(inputs.initialInflationMin, inputs.initialInflationMax),
   }
+  const breakpointSegments = inputs.breakpoints.map((bp) => ({
+    startAge: bp.startAge,
+    growthMean: p10p90ToMean(bp.stockGrowthMin, bp.stockGrowthMax),
+    growthSigma: p10p90ToSigma(bp.stockGrowthMin, bp.stockGrowthMax),
+    inflationMean: p10p90ToMean(bp.inflationMin, bp.inflationMax),
+    inflationSigma: p10p90ToSigma(bp.inflationMin, bp.inflationMax),
+  }))
+  return [initial, ...breakpointSegments].sort((a, b) => a.startAge - b.startAge)
+}
 
-  // Multiple segments: each breakpoint re-samples rates.
-  // We run the projection for each segment independently and splice results.
-  // Approach: run the full projection but substitute the appropriate sampled rates
-  // based on which year we're in. Since runSingleProjection doesn't support
-  // per-year rate changes, we'll pass the initial segment rates and accept that
-  // breakpoint-specific variance is only approximated.
-  //
-  // For a proper implementation, we'd need a per-year rate injection into the
-  // projection loop. For now: sample all segment rates, use the initial segment
-  // rates for runSingleProjection (which handles breakpoints internally via
-  // re-using the passed rates). This is the spec-documented simplification:
-  // "one MC draw per segment."
-  //
-  // Future improvement: extend runSingleProjection to accept per-segment rate maps.
-
-  // Sample one (growth, inflation) draw per breakpoint segment for this run.
-  // Order matters for PRNG determinism: each call to boxMullerNormal consumes
-  // two draws from `rng`.
-  const segRates = inputs.breakpoints.map((bp) => {
-    const growthMean = p10p90ToMean(bp.stockGrowthMin, bp.stockGrowthMax)
-    const growthSigma = p10p90ToSigma(bp.stockGrowthMin, bp.stockGrowthMax)
-    const inflMean = p10p90ToMean(bp.inflationMin, bp.inflationMax)
-    const inflSigma = p10p90ToSigma(bp.inflationMin, bp.inflationMax)
-    return {
-      stockGrowth: boxMullerNormal(growthMean, growthSigma, rng),
-      inflation: boxMullerNormal(inflMean, inflSigma, rng),
-    }
-  })
-
-  return runSingleProjection(
-    inputs,
-    { stockGrowth: initialGrowth, inflation: initialInflation },
-    segRates,
-  )
+/** The segment active at `age`: the latest one whose `startAge ≤ age`. */
+function activeSegment(segments: RateSegment[], age: number): RateSegment {
+  let active = segments[0]
+  for (const s of segments) {
+    if (s.startAge <= age) active = s
+    else break
+  }
+  return active
 }
