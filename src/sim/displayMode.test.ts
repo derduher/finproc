@@ -12,7 +12,15 @@ function makeResult(overrides: Partial<MonteCarloResult> = {}): MonteCarloResult
     successRate: 0.84,
     p50EndBalance: 2_400_000,
     p10EndBalance: 310_000,
+    p90EndBalance: 6_000_000,
     medianDepleteAge: undefined,
+    samplePaths: [
+      { balances: [1000, 1000, 1000], depleteAge: undefined, cutYears: [], raiseYears: [] },
+    ],
+    shortfallByPercentile: [
+      { fraction: 0.1, age: undefined },
+      { fraction: 0.5, age: 90 },
+    ],
     yearlyResults: [
       { age: 32, p10: 100, p50: 200, p90: 300, contributionsMedian: 12_000, socialSecurityMedian: 0, withdrawalsMedian: 0 },
       { age: 33, p10: 100, p50: 200, p90: 300, contributionsMedian: 12_000, socialSecurityMedian: 0, withdrawalsMedian: 0 },
@@ -56,6 +64,31 @@ describe('deflateResult', () => {
     expect(out.yearlyResults[1].p50).toBeCloseTo(200 / 1.03, 4)
     // Row 2 years later: factor = 1/(1.03^2)
     expect(out.yearlyResults[2].p50).toBeCloseTo(200 / (1.03 * 1.03), 4)
+  })
+
+  it('deflates p90EndBalance and sample-path balances; leaves shortfall ages alone (#11)', () => {
+    const inputs = {
+      ...defaultInputs(),
+      person: { ...defaultInputs().person, currentAge: 32, maxAge: 34 },
+      initialInflationMin: 0.02,
+      initialInflationMax: 0.04, // midpoint 3%
+      breakpoints: [],
+    }
+    const result = makeResult()
+    const out = deflateResult(result, 'real', inputs)
+
+    // Surplus read deflates like the other end-balance figures.
+    expect(out.p90EndBalance).toBeLessThan(result.p90EndBalance)
+
+    // Sample-path balances deflate per-year, aligned to yearlyResults ages
+    // (32 → factor 1, 33 → 1/1.03, 34 → 1/1.03²).
+    const p = out.samplePaths[0].balances
+    expect(p[0]).toBeCloseTo(1000, 4)
+    expect(p[1]).toBeCloseTo(1000 / 1.03, 4)
+    expect(p[2]).toBeCloseTo(1000 / (1.03 * 1.03), 4)
+
+    // Shortfall ages are ages, not dollars — untouched.
+    expect(out.shortfallByPercentile).toEqual(result.shortfallByPercentile)
   })
 
   it('deflates cashflow fields (contributions, ss, withdrawals)', () => {

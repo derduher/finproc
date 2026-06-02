@@ -214,6 +214,41 @@ describe('runMonteCarlo — v2 outputs (paths + distributions)', () => {
   })
 })
 
+describe('runMonteCarlo — guardrails (#11)', () => {
+  const plan = (policy: 'flat' | 'guardrails') =>
+    inputs({
+      spendingPolicy: policy,
+      person: { ...defaultInputs().person, currentAge: 65, maxAge: 90, annualSalary: 0, marginalTaxRate: 0 },
+      accounts: [{
+        id: 'a', name: 'Roth', type: 'roth', balance: 1_000_000,
+        contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+        contributionEndAge: 60, withdrawalStartAge: 60,
+      }],
+      annualExpenses: 55_000, // ~5.5% rate — strains a flat plan
+      withdrawalStrategy: WithdrawalStrategy.TaxOptimal,
+    })
+
+  it('sample paths expose cut/raise years, and guardrails runs actually adjust', () => {
+    const r = runMonteCarlo(plan('guardrails'), 100, 42, undefined, 30)
+    for (const p of r.samplePaths) {
+      expect(Array.isArray(p.cutYears)).toBe(true)
+      expect(Array.isArray(p.raiseYears)).toBe(true)
+    }
+    expect(r.samplePaths.some((p) => p.cutYears.length + p.raiseYears.length > 0)).toBe(true)
+  })
+
+  it('flat sample paths have no adjustments', () => {
+    const r = runMonteCarlo(plan('flat'), 50, 42, undefined, 20)
+    expect(r.samplePaths.every((p) => p.cutYears.length === 0 && p.raiseYears.length === 0)).toBe(true)
+  })
+
+  it('guardrails lifts the success rate vs flat at a straining spend', () => {
+    const flat = runMonteCarlo(plan('flat'), 400, 42)
+    const guard = runMonteCarlo(plan('guardrails'), 400, 42)
+    expect(guard.successRate).toBeGreaterThan(flat.successRate)
+  })
+})
+
 describe('runMonteCarlo — breakpoint segment sampling', () => {
   it('breakpoint at age 70 produces two distinct rate segments per run', () => {
     const inp = inputs({

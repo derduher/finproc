@@ -41,13 +41,13 @@ a fictional $34M — is the symptom that drives most of the findings below.
 
 ## Priority summary
 
-Status legend: ✅ done · ⬜ not started.
+Status legend: ✅ done · ◑ partial · ⬜ not started.
 
 | # | Pri | Status | Finding | Goal hit | Effort |
 |---|-----|--------|---------|----------|--------|
 | 1 | **P0** | ✅ (IID) | One return draw per run → no sequence-of-returns risk; fake fat right tail. **Done: per-year IID sampling.** Block-bootstrap is the remaining refinement (#1b). | Accuracy, Risk | L |
 | 1b | **P1** | ⬜ | Per-year draws are IID — no autocorrelation/volatility-clustering. Upgrade to block-bootstrap so crashes persist across consecutive years (the schedule shape already supports it). | Accuracy, Risk | M |
-| 2 | **P0** | ⬜ | Binary "success rate" hides magnitude + timing of failure and rewards over-saving | Risk, Transparency | M (sim) / L (UX) |
+| 2 | **P0** | ◑ | Binary "success rate" hides magnitude + timing of failure and rewards over-saving — engine outputs built (sustainable-spend solver, surplus + shortfall-by-percentile distributions, sample paths); UI reframe pending | Risk, Transparency | M (sim) / L (UX) |
 | 3 | **P1** | ✅ | RMD cash is destroyed, not spent/reinvested; RMD block gated behind `netNeed>0` | Accuracy | S |
 | 4 | **P1** | ✅ | Employer match wrongly subtracted from take-home pre-retirement | Accuracy | S |
 | 5 | **P1** | ✅ | Traditional dollars effectively double-taxed (contrib not pre-tax, then grossed-up on exit) | Accuracy | M |
@@ -56,7 +56,7 @@ Status legend: ✅ done · ⬜ not started.
 | 8 | **P2** | ⬜ | Flat marginal tax, SS tax-free, no 0% LTCG bracket, no bracket-filling | Accuracy | M |
 | 9 | **P2** | ⬜ | Independent inflation/return sampling; no valuation-aware starting return | Accuracy | M |
 | 10 | **P2** | ⬜ | Deterministic `maxAge` = no longevity risk distribution | Risk | M |
-| 11 | **P2** | ⬜ | Flat-real lifetime spending; no dynamic/guardrail withdrawals | Accuracy, Risk | M |
+| 11 | **P2** | ✅ | Flat-real lifetime spending; no dynamic/guardrail withdrawals | Accuracy, Risk | M |
 | 12 | **P3** | ⬜ | Frozen nominal IRS limits, no catch-up; mid-month convention not implemented | Accuracy | S |
 
 Effort: S ≈ <½ day, M ≈ 1–3 days, L ≈ multi-day with test rework.

@@ -691,3 +691,54 @@ describe('runSingleProjection — working-years cash flow', () => {
     expect(yr.withdrawals).toBeCloseTo(0, -1)
   })
 })
+
+describe('runSingleProjection — guardrails spending policy (#11)', () => {
+  // Retiree at 65, single Roth $1M, $60k/yr flat target, no SS/salary/tax.
+  const retiree = (policy: 'flat' | 'guardrails') =>
+    inputs({
+      spendingPolicy: policy,
+      person: {
+        ...defaultInputs().person,
+        currentAge: 65, maxAge: 80, annualSalary: 0, marginalTaxRate: 0, retirementAge: 65,
+      },
+      accounts: [{
+        id: 'a', name: 'Roth', type: 'roth', balance: 1_000_000,
+        contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+        contributionEndAge: 65, withdrawalStartAge: 65,
+      }],
+      annualExpenses: 60_000,
+      socialSecurity: undefined,
+      oneTimeExpenses: [],
+    } as Partial<SimulationInputs>)
+
+  // A bad early sequence (deep crashes up front) spikes the withdrawal rate.
+  const badSequence = [
+    -0.25, -0.25, -0.2, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+  ].map((g) => ({ stockGrowth: g, inflation: 0 }))
+
+  it('flat policy never adjusts spending', () => {
+    const flat = runSingleProjection(retiree('flat'), badSequence)
+    expect(flat.spendAdjustments).toEqual([])
+  })
+
+  it('guardrails cuts spending when the withdrawal rate spikes in a downturn', () => {
+    const guard = runSingleProjection(retiree('guardrails'), badSequence)
+    expect(guard.spendAdjustments.some((a) => a.kind === 'cut')).toBe(true)
+  })
+
+  it('guardrails preserves more capital than flat through a bad sequence', () => {
+    const flat = runSingleProjection(retiree('flat'), badSequence)
+    const guard = runSingleProjection(retiree('guardrails'), badSequence)
+    const flatEnd = flat.yearlyResults.at(-1)!.totalBalance
+    const guardEnd = guard.yearlyResults.at(-1)!.totalBalance
+    // Trimming spending in the downturn leaves more in the portfolio.
+    expect(guardEnd).toBeGreaterThan(flatEnd)
+  })
+
+  it('guardrails raises spending when markets are kind (low withdrawal rate)', () => {
+    const goodSequence = new Array(15).fill({ stockGrowth: 0.18, inflation: 0 })
+    const guard = runSingleProjection(retiree('guardrails'), goodSequence)
+    expect(guard.spendAdjustments.some((a) => a.kind === 'raise')).toBe(true)
+  })
+})

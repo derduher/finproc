@@ -171,6 +171,15 @@ export const SimulationInputsSchema = z
     /** For user-defined strategy: account IDs in withdrawal priority order */
     withdrawalOrder: z.array(z.string()).optional(),
 
+    /**
+     * Spending policy: how the annual draw responds to market performance.
+     * - 'flat' (default): the same real spend every year, come what may.
+     * - 'guardrails': Guyton-Klinger-style flex — trim ~10% when the withdrawal
+     *   rate drifts >20% above its retirement-start baseline, raise ~10% when it
+     *   drifts >20% below. Optional for back-compat with URLs predating this field.
+     */
+    spendingPolicy: z.enum(['flat', 'guardrails']).optional(),
+
     /** PRNG seed for reproducibility */
     seed: z.number().int(),
   })
@@ -261,6 +270,7 @@ export function defaultInputs(): SimulationInputs {
     oneTimeExpenses: [],
     withdrawalStrategy: WithdrawalStrategy.TaxOptimal,
     withdrawalOrder: undefined,
+    spendingPolicy: 'flat',
     seed: 0x4f2a,
   }
 }

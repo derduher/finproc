@@ -28,12 +28,25 @@ export interface YearEndState {
   withdrawals: number
 }
 
+/** A guardrails spending change in a given year. */
+export interface SpendAdjustment {
+  age: number
+  kind: 'cut' | 'raise'
+}
+
 export interface ProjectionResult {
   yearlyResults: YearEndState[]
   succeeded: boolean
   /** Age at which portfolio hit zero (only set when succeeded = false) */
   depleteAge: number | undefined
+  /** Guardrails spending changes across the run (empty for the flat policy). */
+  spendAdjustments: SpendAdjustment[]
 }
+
+/** Guardrails: trim/raise spending by this fraction when the WR drifts past the band. */
+const GUARDRAIL_STEP = 0.1
+/** Guardrails: how far the withdrawal rate must drift from baseline to trigger (±20%). */
+const GUARDRAIL_BAND = 0.2
 
 /**
  * Run a single deterministic projection with pre-sampled growth/inflation rates.
@@ -70,7 +83,15 @@ export function runSingleProjection(
     oneTimeExpenses,
     withdrawalStrategy,
     withdrawalOrder,
+    spendingPolicy,
   } = inputs
+
+  const guardrails = spendingPolicy === 'guardrails'
+  // Guardrails state, persisted across years: the spend ratchets and stays at the
+  // new level (inflation-adjusted) until the next trigger.
+  let spendMultiplier = 1
+  let baseWithdrawalRate: number | undefined
+  const spendAdjustments: SpendAdjustment[] = []
 
   const simAccounts = accounts.map((a) => new SimAccount(a, 0))
 
@@ -226,13 +247,36 @@ export function runSingleProjection(
         disposableIncome = Math.max(0, afterTaxSalary - afterTaxContrib)
       }
 
-      const netNeed = Math.max(0, inflatedExpenses + oneTimeTotal - ssIncome - disposableIncome)
-
-      // Per-account balance before any withdrawals this year — used both to size
-      // RMDs (a floor based on the start-of-year balance) and to measure spending.
+      // Per-account balance before any withdrawals this year — used to size RMDs
+      // (a floor based on the start-of-year balance), measure spending, and judge
+      // the guardrails withdrawal rate.
       const balBeforeWithdrawal: Record<string, number> = {}
       for (const acc of simAccounts) balBeforeWithdrawal[acc.id] = acc.getBalance()
       const balBeforeExpense = simAccounts.reduce((s, a) => s + a.getBalance(), 0)
+
+      // Guardrails: flex the recurring spend with the portfolio. We compare the
+      // current recurring withdrawal rate (net of SS) to the rate locked in at the
+      // first retirement draw; drift past ±band trims/raises spending one step.
+      // Only engages in retirement (when actually drawing from the portfolio).
+      let spendThisYear = inflatedExpenses
+      if (guardrails && yearStartAge >= effectiveRetirementAge && balBeforeExpense > 0) {
+        const recurringNet = inflatedExpenses * spendMultiplier - ssIncome
+        if (recurringNet > 0) {
+          const wr = recurringNet / balBeforeExpense
+          if (baseWithdrawalRate === undefined) {
+            baseWithdrawalRate = wr
+          } else if (wr > baseWithdrawalRate * (1 + GUARDRAIL_BAND)) {
+            spendMultiplier *= 1 - GUARDRAIL_STEP
+            spendAdjustments.push({ age: yearEndAge, kind: 'cut' })
+          } else if (wr < baseWithdrawalRate * (1 - GUARDRAIL_BAND)) {
+            spendMultiplier *= 1 + GUARDRAIL_STEP
+            spendAdjustments.push({ age: yearEndAge, kind: 'raise' })
+          }
+        }
+        spendThisYear = inflatedExpenses * spendMultiplier
+      }
+
+      const netNeed = Math.max(0, spendThisYear + oneTimeTotal - ssIncome - disposableIncome)
 
       let shortfall = 0
       if (netNeed > 0) {
@@ -337,7 +381,7 @@ export function runSingleProjection(
     })
   }
 
-  return { yearlyResults, succeeded, depleteAge }
+  return { yearlyResults, succeeded, depleteAge, spendAdjustments }
 }
 
 // ─── Withdrawal orchestration ─────────────────────────────────────────────────
