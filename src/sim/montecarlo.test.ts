@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runMonteCarlo } from './montecarlo'
+import { runMonteCarlo, shortfallAgeAtFraction } from './montecarlo'
 import { defaultInputs, WithdrawalStrategy } from '../schema'
 import type { SimulationInputs } from '../schema'
 
@@ -144,6 +144,73 @@ describe('runMonteCarlo — memory budget', () => {
     const memAfter = process.memoryUsage().heapUsed
     const deltaMB = (memAfter - memBefore) / 1024 / 1024
     expect(deltaMB).toBeLessThan(100)
+  })
+})
+
+describe('shortfallAgeAtFraction', () => {
+  it('returns undefined when fewer than the fraction deplete', () => {
+    // 5 of 100 deplete → worst 1-in-10 (q=0.10) stays funded
+    const ages = [70, 72, 75, 80, 85]
+    expect(shortfallAgeAtFraction(ages, 100, 0.1)).toBeUndefined()
+  })
+
+  it('returns the boundary age of the worst fraction (earliest first)', () => {
+    // 50 of 100 deplete (ages 60..109). Worst 1-in-10 = nearest-rank index 10.
+    const ages = Array.from({ length: 50 }, (_, i) => 60 + i)
+    expect(shortfallAgeAtFraction(ages, 100, 0.1)).toBe(70) // sorted[10]
+    expect(shortfallAgeAtFraction(ages, 100, 0.5)).toBeUndefined() // index 50 is ∞
+  })
+
+  it('guards runCount <= 0', () => {
+    expect(shortfallAgeAtFraction([70], 0, 0.1)).toBeUndefined()
+  })
+})
+
+describe('runMonteCarlo — v2 outputs (paths + distributions)', () => {
+  const richInp = inputs({
+    person: { ...defaultInputs().person, currentAge: 60, maxAge: 90, marginalTaxRate: 0 },
+    accounts: [{ ...RICH_ACCOUNT }],
+    annualExpenses: 60000,
+  })
+  const poorInp = inputs({
+    person: { ...defaultInputs().person, currentAge: 65, maxAge: 90, marginalTaxRate: 0 },
+    accounts: [{ ...POOR_ACCOUNT }],
+    annualExpenses: 50000,
+    withdrawalStrategy: WithdrawalStrategy.TaxOptimal,
+  })
+
+  it('exposes ordered end-balance percentiles p10 ≤ p50 ≤ p90 (p90 is new)', () => {
+    const r = runMonteCarlo(richInp, 200, 42)
+    expect(r.p10EndBalance).toBeLessThanOrEqual(r.p50EndBalance)
+    expect(r.p50EndBalance).toBeLessThanOrEqual(r.p90EndBalance)
+  })
+
+  it('returns a sample of individual run trajectories for the paths chart', () => {
+    const r = runMonteCarlo(richInp, 200, 42, undefined, 50)
+    expect(r.samplePaths.length).toBe(50)
+    const years = richInp.person.maxAge - richInp.person.currentAge
+    for (const p of r.samplePaths) {
+      expect(p.balances.length).toBe(years)
+      expect(Number.isFinite(p.balances[0])).toBe(true)
+    }
+  })
+
+  it('caps the sample at runCount when fewer runs than requested', () => {
+    const r = runMonteCarlo(richInp, 20, 42, undefined, 60)
+    expect(r.samplePaths.length).toBe(20)
+  })
+
+  it('shortfall-by-percentile: a rich plan keeps the worst 1-in-10 funded; a poor plan runs short within the horizon', () => {
+    const rich = runMonteCarlo(richInp, 400, 42)
+    const worst10Rich = rich.shortfallByPercentile.find((s) => s.fraction === 0.1)!
+    expect(worst10Rich).toBeDefined()
+    expect(worst10Rich.age).toBeUndefined() // <10% deplete → worst 1-in-10 stays funded
+
+    const poor = runMonteCarlo(poorInp, 400, 42)
+    const worst10Poor = poor.shortfallByPercentile.find((s) => s.fraction === 0.1)!
+    expect(typeof worst10Poor.age).toBe('number')
+    expect(worst10Poor.age!).toBeGreaterThanOrEqual(poorInp.person.currentAge)
+    expect(worst10Poor.age!).toBeLessThanOrEqual(poorInp.person.maxAge)
   })
 })
 

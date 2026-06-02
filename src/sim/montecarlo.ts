@@ -17,6 +17,22 @@ export interface MonteCarloYearlyResult {
   withdrawalsMedian: number
 }
 
+/** One sampled run trajectory, for the individual-paths ("spaghetti") chart. */
+export interface SamplePath {
+  /** Total portfolio balance at each year-end (nominal $), aligned to yearlyResults ages. */
+  balances: number[]
+  /** Age the portfolio ran short, if it did. */
+  depleteAge: number | undefined
+}
+
+/** Depletion-timing read: the age by which the worst `fraction` of runs run short. */
+export interface ShortfallPercentile {
+  /** Worst fraction of outcomes, e.g. 0.10 = the worst 1-in-10. */
+  fraction: number
+  /** Age by which that worst fraction has run short; undefined if fewer than `fraction` of runs ever deplete. */
+  age: number | undefined
+}
+
 export interface MonteCarloResult {
   /** Percentile bands + cashflow medians: one entry per year */
   yearlyResults: MonteCarloYearlyResult[]
@@ -25,8 +41,36 @@ export interface MonteCarloResult {
   p50EndBalance: number
   /** 10th-percentile ending balance */
   p10EndBalance: number
+  /** 90th-percentile ending balance — the "if markets are kind" surplus read */
+  p90EndBalance: number
   /** Median depletion age across failing runs; undefined if all succeed */
   medianDepleteAge: number | undefined
+  /** A sample of individual run trajectories (≤ sampleCount) for the paths chart */
+  samplePaths: SamplePath[]
+  /** Depletion timing at a few worst-case fractions (magnitude + timing risk read) */
+  shortfallByPercentile: ShortfallPercentile[]
+}
+
+/** Worst-case fractions reported in `shortfallByPercentile`. */
+const SHORTFALL_FRACTIONS = [0.01, 0.05, 0.1, 0.25, 0.5] as const
+
+/**
+ * Age by which the worst `q`-fraction of runs have run short. Non-depleting runs
+ * count as "never" (∞); if fewer than `q` of all runs deplete, returns undefined
+ * ("even the worst 1-in-1/q keep funded"). Nearest-rank, no interpolation (so an
+ * ∞ never leaks into the value).
+ */
+export function shortfallAgeAtFraction(
+  depleteAges: number[],
+  runCount: number,
+  q: number,
+): number | undefined {
+  if (runCount <= 0) return undefined
+  const sorted = [...depleteAges].sort((a, b) => a - b)
+  const idx = Math.min(runCount - 1, Math.floor(q * runCount))
+  // Positions [0, depleteCount) hold finite depletion ages (earliest first);
+  // [depleteCount, runCount) are implicitly ∞ (never depleted).
+  return idx < sorted.length ? sorted[idx] : undefined
 }
 
 export type ProgressStage = 'parse' | 'sample' | 'project' | 'aggregate'
@@ -54,6 +98,7 @@ export function runMonteCarlo(
   runCount: number = 1000,
   baseSeed: number = inputs.seed,
   onProgress?: ProgressCallback,
+  sampleCount: number = 60,
 ): MonteCarloResult {
   onProgress?.({ stage: 'parse', done: 1, total: 1 })
   const rng = mulberry32(baseSeed)
@@ -129,12 +174,29 @@ export function runMonteCarlo(
     }
   })
 
+  // Sample of individual trajectories for the paths chart. The runs are already
+  // a seeded random sample, so the first `sampleCount` are a representative draw.
+  const samplePaths: SamplePath[] = perRunYears
+    .slice(0, Math.min(sampleCount, runCount))
+    .map((yrs) => ({
+      balances: yrs.map((y) => y.totalBalance),
+      depleteAge: yrs.find((y) => y.totalBalance === 0)?.age,
+    }))
+
+  const shortfallByPercentile: ShortfallPercentile[] = SHORTFALL_FRACTIONS.map((q) => ({
+    fraction: q,
+    age: shortfallAgeAtFraction(depleteAges, runCount, q),
+  }))
+
   const result: MonteCarloResult = {
     yearlyResults,
     successRate: successCount / runCount,
     p50EndBalance: percentile(endBalances, 50),
     p10EndBalance: percentile(endBalances, 10),
+    p90EndBalance: percentile(endBalances, 90),
     medianDepleteAge: depleteAges.length > 0 ? percentile(depleteAges, 50) : undefined,
+    samplePaths,
+    shortfallByPercentile,
   }
   onProgress?.({ stage: 'aggregate', done: 1, total: 1 })
   return result
