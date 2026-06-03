@@ -170,3 +170,20 @@
 
 /* tiny legend dot */
 .hf .ldot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: middle; }
+
+/* ── Main screen responsive layout ────────────────────────────────── */
+.hf .v2-screen { padding: 36px 56px 40px; }
+.hf .v2-hero-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 48px; align-items: start; margin-bottom: 30px; }
+.hf .v2-chart-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 6px; }
+.hf .v2-outcome-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 16px; }
+
+@media (max-width: 768px) {
+  .hf .topbar2 { padding: 0 14px; }
+  .hf .v2-screen { padding: 18px 16px 28px; }
+  .hf .v2-hero-grid { grid-template-columns: 1fr; gap: 22px; margin-bottom: 22px; }
+  .hf .v2-chart-head { flex-direction: column; align-items: flex-start; }
+  .hf .v2-outcome-grid { grid-template-columns: 1fr; }
+  .hf .hero-spend { font-size: 56px !important; }
+  /* Drawers go full-width on a phone. */
+  .hf .drawer { width: 100% !important; }
+}

@@ -73,7 +73,15 @@ export function PathsChart({
   // Nothing to draw yet (e.g. a transient empty result) — render an empty frame
   // rather than feeding NaN coordinates into the SVG.
   if (n === 0 || samplePaths.length === 0) {
-    return <svg width={width} height={height} role="img" aria-label="Projected portfolio paths" />
+    return (
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={{ display: 'block', width: '100%', height: 'auto', maxWidth: width }}
+        role="img"
+        aria-label="Projected portfolio paths"
+      />
+    )
   }
   const hasStart = startBalance != null
   // Age for each plotted point (optionally prepend the starting age).
@@ -133,7 +141,13 @@ export function PathsChart({
   )
 
   return (
-    <svg width={width} height={height} style={{ display: 'block', overflow: 'visible' }} role="img" aria-label="Projected portfolio paths">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ display: 'block', width: '100%', height: 'auto', maxWidth: width, overflow: 'visible' }}
+      role="img"
+      aria-label="Projected portfolio paths"
+    >
       {/* gridlines */}
       {showAxes &&
         yTicks.map((v, i) => (

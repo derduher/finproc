@@ -60,11 +60,11 @@ export default function App() {
   const StepComponent = STEPS[activeStep] ?? PersonStep
   const isResults = activeStep === 5
 
-  // v2 single live screen, opt-in via ?v2=1 while the wizard remains the default.
-  // Captured once at mount: the URL-sync effect rewrites the query (?s=/?ui=) and
-  // would otherwise strip the flag. App-shell routing (making v2 the default) is later.
-  const [v2] = useState(
-    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('v2') === '1',
+  // The v2 single live screen is the default; the legacy 6-step wizard is kept
+  // reachable via ?v1=1. Captured once at mount: the URL-sync effect rewrites the
+  // query (?s=/?ui=) and would otherwise strip the flag.
+  const [legacy] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('v1') === '1',
   )
 
   // Mobile vs. desktop chrome is handled by CSS media queries inside Frame —
@@ -76,7 +76,7 @@ export default function App() {
         visible={inputsParseFailed && !bannerDismissed}
         onDismiss={() => setBannerDismissed(true)}
       />
-      {v2 ? (
+      {!legacy ? (
         <div className="hf" data-aesthetic={aesthetic} data-theme={theme} data-density={density} style={{ height: '100%' }}>
           {inputs.accounts.length === 0 && !(initialInputs && initialInputs.accounts.length > 0) ? (
             <GuidedFirstRun onComplete={setInputs} />

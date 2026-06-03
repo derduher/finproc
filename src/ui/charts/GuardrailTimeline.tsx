@@ -28,7 +28,7 @@ export function GuardrailTimeline({
   const x = (age: number) => padLeft + ((age - currentAge) / span) * cw
   const h = 30
   return (
-    <svg width={width} height={h} style={{ display: 'block' }} role="img" aria-label="Spending adjustment years">
+    <svg viewBox={`0 0 ${width} ${h}`} preserveAspectRatio="xMidYMid meet" style={{ display: 'block', width: '100%', height: 'auto', maxWidth: width }} role="img" aria-label="Spending adjustment years">
       <line x1={padLeft} y1={h / 2} x2={padLeft + cw} y2={h / 2} stroke="var(--line)" strokeWidth="1" />
       {cutYears.map((a) => (
         <rect key={`c${a}`} x={x(a) - 5} y={6} width="10" height={h - 12} rx="2" fill="var(--bad)" opacity="0.8" />
