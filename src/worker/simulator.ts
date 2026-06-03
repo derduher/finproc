@@ -9,7 +9,9 @@
  */
 import { expose } from 'comlink'
 import { runMonteCarlo } from '../sim/montecarlo'
+import { findSustainableSpend } from '../sim/spendSolver'
 import type { MonteCarloResult, ProgressCallback } from '../sim/montecarlo'
+import type { SustainableSpendResult } from '../sim/spendSolver'
 import type { SimulationInputs } from '../schema'
 
 export type { ProgressCallback, ProgressEvent } from '../sim/montecarlo'
@@ -32,12 +34,25 @@ export async function simulate(
   return runMonteCarlo(inputs, runCount, inputs.seed, onProgress)
 }
 
+/**
+ * Solve for the highest annual spend (today's $) that still meets a target
+ * confidence — the "spending you can sustain" headline. Runs off the main thread.
+ * Exported directly for testability without Comlink.
+ */
+export async function sustainableSpend(
+  inputs: SimulationInputs,
+  targetSuccessRate: number = 0.9,
+  opts?: { runCount?: number; tolerance?: number },
+): Promise<SustainableSpendResult> {
+  return findSustainableSpend(inputs, targetSuccessRate, opts)
+}
+
 // Comlink exposure — only runs in Worker context (not during tests).
 // The `typeof WorkerGlobalScope !== 'undefined'` guard prevents errors in jsdom.
 // Comlink exposure — only in Worker context
 try {
   if (typeof self !== 'undefined' && 'WorkerGlobalScope' in globalThis) {
-    expose({ simulate })
+    expose({ simulate, sustainableSpend })
   }
 } catch {
   // Not in a worker context — this is fine for tests

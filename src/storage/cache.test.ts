@@ -42,6 +42,13 @@ describe('cache — key determinism', () => {
     const inp2 = { ...defaultInputs(), seed: 2 }
     expect(getCacheKey(inp1)).not.toBe(getCacheKey(inp2))
   })
+
+  it('key is namespaced by an output-shape version so legacy entries are ignored', () => {
+    // Bumping CACHE_VERSION when MonteCarloResult gains fields (samplePaths,
+    // p90EndBalance, shortfallByPercentile, …) keeps stale-shaped entries from
+    // being served.
+    expect(getCacheKey(defaultInputs())).toMatch(/^mc:v\d+:/)
+  })
 })
 
 describe('cache — round-trip', () => {
