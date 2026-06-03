@@ -123,7 +123,7 @@ export function GuidedFirstRun({ onComplete }: { onComplete: (inputs: Simulation
 
   return (
     <div className="hf" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}>
-      <TopBar2 />
+      <TopBar2 actions={false} />
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '44px 32px' }}>
         <div style={{ width: 660 }}>
           <div className="label" style={{ marginBottom: 10 }}>let's get a rough picture</div>

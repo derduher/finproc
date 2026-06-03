@@ -12,6 +12,12 @@ html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
+  /* Stop the iOS/iPad "rubber-band" overscroll from exposing an unthemed band (#5). */
+  overscroll-behavior: none;
+}
+
+html, body {
+  background: var(--bg);
 }
 
 body {

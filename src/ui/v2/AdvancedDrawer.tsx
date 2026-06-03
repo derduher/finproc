@@ -11,15 +11,19 @@ import { useState } from 'react'
 import { useStore } from '../../store'
 import { MoneyInput } from '../shared/MoneyInput'
 import { WithdrawalStrategy } from '../../schema'
-import type { Account, OneTimeExpense } from '../../schema'
+import type { Account, OneTimeExpense, ContributionFrequency } from '../../schema'
 import {
   ACCOUNT_KIND_LABELS,
   accountKind,
   applyAccountKind,
   kindSupportsMax,
   annualContribOf,
-  withAnnualContrib,
+  setContributionFrequency,
+  CONTRIBUTION_FREQUENCIES,
+  CONTRIBUTION_FREQUENCY_LABELS,
+  withMatchType,
   type AccountKind,
+  type MatchType,
 } from './advancedHelpers'
 
 function Acc({
@@ -61,11 +65,11 @@ const pill: React.CSSProperties = {
   outline: 'none',
 }
 
-function Money({ value, onChange, width = 104 }: { value: number; onChange: (v: number) => void; width?: number }) {
+function Money({ value, onChange, width = 104, step = 1000 }: { value: number; onChange: (v: number) => void; width?: number; step?: number }) {
   return (
     <span className="lever-value" style={{ padding: '4px 8px', width, justifyContent: 'flex-start' }}>
       <span className="lv-pre">$</span>
-      <MoneyInput value={value} onChange={onChange} step={1000} style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: width - 24 }} />
+      <MoneyInput value={value} onChange={onChange} step={step} style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: width - 24 }} />
     </span>
   )
 }
@@ -161,11 +165,41 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                     </label>
                     {a.contributeMax && kindSupportsMax(kind) ? (
                       <span className="defpill" style={{ color: 'var(--good)' }}>at annual max</span>
-                    ) : (
+                    ) : a.contributionType === 'percent' ? (
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span className="micro">adds / yr</span>
-                        <Money width={96} value={annual} onChange={(v) => updateAccount(i, (x) => withAnnualContrib(x, v))} />
+                        <span className="micro">adds</span>
+                        <span className="lever-value" style={{ padding: '4px 8px' }}>
+                          <input
+                            type="number"
+                            aria-label="Contribution percent"
+                            value={Math.round(a.contributionAmount * 100)}
+                            onChange={(e) => updateAccount(i, (x) => ({ ...x, contributionAmount: Math.max(0, Number(e.target.value)) / 100 }))}
+                            style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: 44 }}
+                          />
+                          <span className="lv-suf">% of pay</span>
+                        </span>
                       </label>
+                    ) : (
+                      <>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span className="micro">adds</span>
+                          <Money width={96} step={50} value={a.contributionAmount} onChange={(v) => updateAccount(i, (x) => ({ ...x, contributionType: 'flat', contributionAmount: Math.max(0, v) }))} />
+                        </label>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span className="micro">how often</span>
+                          <select
+                            aria-label="Contribution frequency"
+                            value={a.contributionFrequency}
+                            onChange={(e) => updateAccount(i, (x) => setContributionFrequency(x, e.target.value as ContributionFrequency))}
+                            style={pill}
+                          >
+                            {CONTRIBUTION_FREQUENCIES.map((f) => (
+                              <option key={f} value={f}>{CONTRIBUTION_FREQUENCY_LABELS[f]}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <span className="micro" style={{ color: 'var(--ink-3)', paddingBottom: 7 }}>≈ {fmtK(annual)}/yr</span>
+                      </>
                     )}
                   </div>
                   {kindSupportsMax(kind) && (
@@ -184,23 +218,65 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                         <input
                           type="checkbox"
                           checked={!!a.employerMatch}
-                          onChange={(e) =>
-                            updateAccount(i, (x) => ({
-                              ...x,
-                              employerMatch: e.target.checked ? { type: 'flat', annualAmount: 6_000 } : undefined,
-                            }))
-                          }
+                          onChange={(e) => updateAccount(i, (x) => withMatchType(x, e.target.checked ? 'flat' : null))}
                         />
-                        <span className="micro">employer match (flat)</span>
+                        <span className="micro">employer match</span>
                       </label>
-                      {a.employerMatch?.type === 'flat' && (
-                        <span style={{ marginLeft: 10 }}>
-                          <Money
-                            width={96}
-                            value={a.employerMatch.annualAmount}
-                            onChange={(v) => updateAccount(i, (x) => ({ ...x, employerMatch: { type: 'flat', annualAmount: v } }))}
-                          />
-                        </span>
+                      {a.employerMatch && (
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+                          <select
+                            aria-label="Match type"
+                            value={a.employerMatch.type}
+                            onChange={(e) => updateAccount(i, (x) => withMatchType(x, e.target.value as MatchType))}
+                            style={pill}
+                          >
+                            <option value="flat">flat $ / yr</option>
+                            <option value="percent">% of salary</option>
+                          </select>
+                          {a.employerMatch.type === 'flat' ? (
+                            <Money
+                              width={96}
+                              value={a.employerMatch.annualAmount}
+                              onChange={(v) => updateAccount(i, (x) => ({ ...x, employerMatch: { type: 'flat', annualAmount: v } }))}
+                            />
+                          ) : (
+                            <>
+                              <span className="lever-value" style={{ padding: '4px 8px' }}>
+                                <input
+                                  type="number"
+                                  aria-label="Match percent"
+                                  value={a.employerMatch.matchPercent}
+                                  onChange={(e) =>
+                                    updateAccount(i, (x) =>
+                                      x.employerMatch?.type === 'percent'
+                                        ? { ...x, employerMatch: { ...x.employerMatch, matchPercent: Math.max(0, Number(e.target.value)) } }
+                                        : x,
+                                    )
+                                  }
+                                  style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: 40 }}
+                                />
+                                <span className="lv-suf">% match</span>
+                              </span>
+                              <span className="micro">up to</span>
+                              <span className="lever-value" style={{ padding: '4px 8px' }}>
+                                <input
+                                  type="number"
+                                  aria-label="Match up-to percent"
+                                  value={a.employerMatch.upToPercent}
+                                  onChange={(e) =>
+                                    updateAccount(i, (x) =>
+                                      x.employerMatch?.type === 'percent'
+                                        ? { ...x, employerMatch: { ...x.employerMatch, upToPercent: Math.max(0, Number(e.target.value)) } }
+                                        : x,
+                                    )
+                                  }
+                                  style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: 40 }}
+                                />
+                                <span className="lv-suf">% of pay</span>
+                              </span>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -242,7 +318,7 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
           </Acc>
 
           {/* Social Security */}
-          <Acc title="Social Security" value={ss ? `${fmtK(ss.annualAmountPresentDollars)} / yr at ${ss.claimAge}` : 'not included'} defaultOpen>
+          <Acc title="Social Security" value={ss ? `${fmtK(Math.round(ss.annualAmountPresentDollars / 12))} / mo at ${ss.claimAge}` : 'not included'} defaultOpen>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
               <input
                 type="checkbox"
@@ -252,10 +328,14 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
               <span className="micro">include Social Security</span>
             </label>
             {ss && (
-              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span className="micro">benefit / yr</span>
-                  <Money value={ss.annualAmountPresentDollars} onChange={(v) => patchInputs({ socialSecurity: { ...ss, annualAmountPresentDollars: v } })} />
+                  <span className="micro">benefit / mo</span>
+                  <Money
+                    step={50}
+                    value={Math.round(ss.annualAmountPresentDollars / 12)}
+                    onChange={(v) => patchInputs({ socialSecurity: { ...ss, annualAmountPresentDollars: Math.max(0, v) * 12 } })}
+                  />
                 </label>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span className="micro">claim at age</span>
@@ -269,6 +349,7 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                     style={{ ...pill, width: 56 }}
                   />
                 </label>
+                <span className="micro" style={{ color: 'var(--ink-3)', paddingBottom: 7 }}>≈ {fmtK(ss.annualAmountPresentDollars)}/yr · today's $</span>
               </div>
             )}
           </Acc>

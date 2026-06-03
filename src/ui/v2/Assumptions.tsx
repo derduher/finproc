@@ -8,14 +8,14 @@ import { formatMoneyAbbreviated as fmt } from '../../math'
 export type Bias = 'opt' | 'cons' | 'two'
 
 /** opt = optimistic ↑, cons = conservative ↓, two = two-sided ⇄ */
-export function AssumptionChip({ bias, label, hint }: { bias: Bias; label: string; hint?: string }) {
+export function AssumptionChip({ bias, label, hint, onClick }: { bias: Bias; label: string; hint?: string; onClick?: () => void }) {
   const glyph = bias === 'opt' ? '↑' : bias === 'cons' ? '↓' : '⇄'
   return (
-    <div className="achip">
+    <button type="button" className="achip" onClick={onClick} aria-label={`${label}${hint ? ` — ${hint}` : ''}. How we model this`}>
       <span className={'bias ' + bias}>{glyph}</span>
       <span>{label}</span>
       {hint && <span className="ahint">· {hint}</span>}
-    </div>
+    </button>
   )
 }
 
@@ -43,7 +43,7 @@ export function AssumptionBar({
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
       <span className="label" style={{ marginRight: 2 }}>assumptions</span>
       {items.map((it) => (
-        <AssumptionChip key={it.label} bias={it.bias} label={it.label} hint={it.hint} />
+        <AssumptionChip key={it.label} bias={it.bias} label={it.label} hint={it.hint} onClick={onMethodology} />
       ))}
       <button className="btn btn-sm btn-ghost" style={{ marginLeft: 2 }} onClick={onMethodology}>
         How we model this →

@@ -194,17 +194,21 @@ export function PathsChart({
         </g>
       )}
 
-      {/* retire marker */}
-      {showRetire && (
-        <g>
-          <line x1={x(retireAge)} y1={pad.t} x2={x(retireAge)} y2={pad.t + ch} stroke="var(--ink-3)" strokeWidth="1" strokeDasharray="3 4" />
-          {!inline && (
-            <text x={x(retireAge) + 6} y={pad.t + 12} fontFamily="var(--font-body)" fontSize="11" fill="var(--ink-3)">
-              retire · {retireAge}
-            </text>
-          )}
-        </g>
-      )}
+      {/* retire marker. When the bar is in the left portion of the chart its top
+          label would collide with the top-left legend, so drop it to the bottom. */}
+      {showRetire && (() => {
+        const onLeft = x(retireAge) < pad.l + cw * 0.4
+        return (
+          <g>
+            <line x1={x(retireAge)} y1={pad.t} x2={x(retireAge)} y2={pad.t + ch} stroke="var(--ink-3)" strokeWidth="1" strokeDasharray="3 4" />
+            {!inline && (
+              <text x={x(retireAge) + 6} y={onLeft ? pad.t + ch - 6 : pad.t + 12} fontFamily="var(--font-body)" fontSize="11" fill="var(--ink-3)">
+                retire · {retireAge}
+              </text>
+            )}
+          </g>
+        )
+      })()}
 
       {/* one-time expenditure markers */}
       {showExpenses &&
