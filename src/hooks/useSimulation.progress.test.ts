@@ -22,6 +22,9 @@ const MOCK_RESULT: MonteCarloResult = {
   p50EndBalance: 1_200_000,
   p10EndBalance: 1_000_000,
   medianDepleteAge: undefined,
+  p90EndBalance: 0,
+  samplePaths: [],
+  shortfallByPercentile: [],
 }
 
 const BASE_INPUTS = {

@@ -43,6 +43,9 @@ const MOCK_RESULT: MonteCarloResult = {
   p50EndBalance: 1_150_000,
   p10EndBalance: 750_000,
   medianDepleteAge: undefined,
+  p90EndBalance: 0,
+  samplePaths: [],
+  shortfallByPercentile: [],
 }
 
 function makeInputs(overrides: Partial<SimulationInputs> = {}): SimulationInputs {
