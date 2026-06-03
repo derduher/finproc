@@ -9,6 +9,7 @@ import { ExpensesStep } from './ui/steps/ExpensesStep'
 import { StrategyStep } from './ui/steps/StrategyStep'
 import { ResultsStep } from './ui/results/ResultsStep'
 import { MainScreen } from './ui/v2/MainScreen'
+import { GuidedFirstRun } from './ui/v2/GuidedFirstRun'
 import { useStore } from './store'
 import { useUrlSync } from './hooks/useUrlSync'
 
@@ -59,9 +60,12 @@ export default function App() {
   const StepComponent = STEPS[activeStep] ?? PersonStep
   const isResults = activeStep === 5
 
-  // v2 single live screen, opt-in via ?v2=1 while the wizard remains the default.
-  // App-shell routing (first-run vs live, making v2 the default) is a later step.
-  const v2 = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('v2') === '1'
+  // The v2 single live screen is the default; the legacy 6-step wizard is kept
+  // reachable via ?v1=1. Captured once at mount: the URL-sync effect rewrites the
+  // query (?s=/?ui=) and would otherwise strip the flag.
+  const [legacy] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('v1') === '1',
+  )
 
   // Mobile vs. desktop chrome is handled by CSS media queries inside Frame —
   // both chromes live in the DOM and the browser picks the right one at the
@@ -72,9 +76,13 @@ export default function App() {
         visible={inputsParseFailed && !bannerDismissed}
         onDismiss={() => setBannerDismissed(true)}
       />
-      {v2 ? (
+      {!legacy ? (
         <div className="hf" data-aesthetic={aesthetic} data-theme={theme} data-density={density} style={{ height: '100%' }}>
-          <MainScreen />
+          {inputs.accounts.length === 0 && !(initialInputs && initialInputs.accounts.length > 0) ? (
+            <GuidedFirstRun onComplete={setInputs} />
+          ) : (
+            <MainScreen />
+          )}
         </div>
       ) : (
         <Frame wide={isResults}>

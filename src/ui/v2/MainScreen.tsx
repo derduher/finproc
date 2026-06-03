@@ -5,6 +5,7 @@
  * read, the spending-policy toggle, and bias-tagged assumptions. Every lever edits
  * the store in place; the simulation re-runs through the worker + cache.
  */
+import { useState } from 'react'
 import { useStore } from '../../store'
 import { useSimulation } from '../../hooks/useSimulation'
 import { useSustainableSpend } from '../../hooks/useSustainableSpend'
@@ -17,6 +18,8 @@ import { SustainableHero, RiskRead, SurplusRead, HoldChip } from './Outcomes'
 import { AssumptionBar, ModeToggle } from './Assumptions'
 import { PathsChart, type PathExpenseMarker } from '../charts/PathsChart'
 import { GuardrailTimeline } from '../charts/GuardrailTimeline'
+import { AdvancedDrawer } from './AdvancedDrawer'
+import { MethodologyDrawer } from './MethodologyDrawer'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
 /** Sample path whose ending balance is closest to the median — a representative run. */
@@ -34,10 +37,11 @@ function representativePath(result: MonteCarloResult) {
   return best
 }
 
-export function MainScreen({ onAdvanced }: { onAdvanced?: () => void }) {
+export function MainScreen() {
   const inputs = useStore((s) => s.inputs)
   const displayMode = useStore((s) => s.ui.displayMode)
   const patchInputs = useStore((s) => s.patchInputs)
+  const [drawer, setDrawer] = useState<null | 'advanced' | 'methodology'>(null)
 
   const { result: rawResult, loading } = useSimulation(inputs)
   const { spend } = useSustainableSpend(inputs)
@@ -46,9 +50,9 @@ export function MainScreen({ onAdvanced }: { onAdvanced?: () => void }) {
   const guardrails = inputs.spendingPolicy === 'guardrails'
 
   return (
-    <div className="hf" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <TopBar2 onAdvanced={onAdvanced} />
-      <div style={{ flex: 1, overflow: 'auto', padding: '36px 56px 40px' }}>
+    <div className="hf" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+      <TopBar2 onAdvanced={() => setDrawer('advanced')} />
+      <div className="v2-screen" style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ maxWidth: CHART_W, margin: '0 auto' }}>
           {!rawResult ? (
             <div style={{ padding: '120px 0', textAlign: 'center', color: 'var(--ink-3)' }}>
@@ -75,7 +79,7 @@ export function MainScreen({ onAdvanced }: { onAdvanced?: () => void }) {
               return (
                 <>
                   {/* hero + levers */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: 48, alignItems: 'start', marginBottom: 30 }}>
+                  <div className="v2-hero-grid">
                     {spend == null ? (
                       <div>
                         <div className="label" style={{ marginBottom: 8 }}>spending you can sustain</div>
@@ -93,7 +97,7 @@ export function MainScreen({ onAdvanced }: { onAdvanced?: () => void }) {
 
                   {/* chart */}
                   <div style={{ borderTop: '1px solid var(--line)', paddingTop: 22, marginBottom: 18 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6 }}>
+                    <div className="v2-chart-head">
                       <div>
                         <h2 style={{ margin: 0 }}>One thousand possible futures</h2>
                         <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>
@@ -130,7 +134,7 @@ export function MainScreen({ onAdvanced }: { onAdvanced?: () => void }) {
                   </div>
 
                   {/* two-sided outcome */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 16 }}>
+                  <div className="v2-outcome-grid">
                     <RiskRead reads={reads} />
                     <SurplusRead reads={reads} />
                   </div>
@@ -138,7 +142,7 @@ export function MainScreen({ onAdvanced }: { onAdvanced?: () => void }) {
                   {/* demoted success + assumptions */}
                   <div style={{ borderTop: '1px solid var(--line)', paddingTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <HoldChip reads={reads} />
-                    <AssumptionBar maxAge={inputs.person.maxAge} />
+                    <AssumptionBar maxAge={inputs.person.maxAge} onMethodology={() => setDrawer('methodology')} />
                   </div>
                 </>
               )
@@ -146,6 +150,9 @@ export function MainScreen({ onAdvanced }: { onAdvanced?: () => void }) {
           )}
         </div>
       </div>
+
+      {drawer === 'advanced' && <AdvancedDrawer onClose={() => setDrawer(null)} />}
+      {drawer === 'methodology' && <MethodologyDrawer onClose={() => setDrawer(null)} />}
     </div>
   )
 }
