@@ -91,6 +91,51 @@ export function SurplusRead({ reads }: { reads: OutcomeReads }) {
   )
 }
 
+/**
+ * "How soon could you retire?" — the companion solve to the sustainable-spend
+ * hero (#10). `age` is null while solving and undefined when even retiring at
+ * maxAge can't sustain the target spend.
+ */
+export function EarliestRetireRead({
+  age,
+  planRetireAge,
+  targetSpend,
+  maxAge,
+  loading,
+}: {
+  age: number | null | undefined
+  planRetireAge: number
+  targetSpend: number
+  maxAge: number
+  loading: boolean
+}) {
+  return (
+    <div style={{ marginTop: 16, padding: '12px 14px', border: '1px solid var(--line)', borderRadius: 10, maxWidth: 460, background: 'var(--bg-elev)' }}>
+      <div className="label" style={{ marginBottom: 6 }}>how soon could you retire?</div>
+      {age === null ? (
+        <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>{loading ? 'solving for the earliest age…' : '—'}</div>
+      ) : age === undefined ? (
+        <div style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          Even retiring at <b className="num" style={{ color: 'var(--ink)' }}>{maxAge}</b>, spending {fmt(targetSpend)}/yr isn't
+          sustainable at 90%. Trim spending or save more.
+        </div>
+      ) : (
+        <div style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          Earliest at <b className="num" style={{ color: 'var(--ink)', fontSize: 15 }}>age {age}</b> while spending {fmt(targetSpend)}/yr —{' '}
+          {age < planRetireAge ? (
+            <b style={{ color: 'var(--good)' }}>{planRetireAge - age} year{planRetireAge - age === 1 ? '' : 's'} sooner than your plan</b>
+          ) : age > planRetireAge ? (
+            <b style={{ color: 'var(--bad)' }}>{age - planRetireAge} year{age - planRetireAge === 1 ? '' : 's'} later than your plan of {planRetireAge}</b>
+          ) : (
+            <>right at your planned age</>
+          )}
+          .
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Demoted secondary metric — the old hero, now a quiet chip. */
 export function HoldChip({ reads }: { reads: OutcomeReads }) {
   return (

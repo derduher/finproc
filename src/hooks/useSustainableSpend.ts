@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { sustainableSpend } from '../worker/simulator'
+import { useDebouncedValue } from './useDebouncedValue'
 import type { SimulationInputs } from '../schema'
 
 export interface SustainableSpendState {
@@ -21,18 +22,19 @@ export function useSustainableSpend(
   target = 0.9,
   runCount = 200,
 ): SustainableSpendState {
+  const debounced = useDebouncedValue(inputs, 350)
   const [spend, setSpend] = useState<number | null>(null)
   const [successRate, setSuccessRate] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!inputs) {
+    if (!debounced) {
       setLoading(false)
       return
     }
     let cancelled = false
     setLoading(true)
-    sustainableSpend(inputs, target, { runCount })
+    sustainableSpend(debounced, target, { runCount })
       .then((res) => {
         if (cancelled) return
         setSpend(res.spend)
@@ -46,7 +48,7 @@ export function useSustainableSpend(
     return () => {
       cancelled = true
     }
-  }, [inputs, target, runCount])
+  }, [debounced, target, runCount])
 
   return { spend, successRate, loading }
 }

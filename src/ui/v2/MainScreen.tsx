@@ -9,12 +9,13 @@ import { useState } from 'react'
 import { useStore } from '../../store'
 import { useSimulation } from '../../hooks/useSimulation'
 import { useSustainableSpend } from '../../hooks/useSustainableSpend'
+import { useEarliestRetirementAge } from '../../hooks/useEarliestRetirementAge'
 import { deflateResult } from '../../sim/displayMode'
 import { deriveOutcomeReads } from '../../sim/outcome'
 import { formatMoneyAbbreviated as fmt } from '../../math'
 import { TopBar2 } from './TopBar2'
 import { CoreLevers, totalSaved } from './CoreLevers'
-import { SustainableHero, RiskRead, SurplusRead, HoldChip } from './Outcomes'
+import { SustainableHero, RiskRead, SurplusRead, HoldChip, EarliestRetireRead } from './Outcomes'
 import { AssumptionBar, ModeToggle } from './Assumptions'
 import { PathsChart, type PathExpenseMarker } from '../charts/PathsChart'
 import { GuardrailTimeline } from '../charts/GuardrailTimeline'
@@ -45,6 +46,7 @@ export function MainScreen() {
 
   const { result: rawResult, loading } = useSimulation(inputs)
   const { spend } = useSustainableSpend(inputs)
+  const { age: earliestAge, loading: solvingAge } = useEarliestRetirementAge(inputs)
 
   const CHART_W = 1320
   const guardrails = inputs.spendingPolicy === 'guardrails'
@@ -87,7 +89,16 @@ export function MainScreen() {
                         <div className="micro" style={{ marginTop: 8 }}>solving for your sustainable spend…</div>
                       </div>
                     ) : (
-                      <SustainableHero reads={reads} />
+                      <div>
+                        <SustainableHero reads={reads} />
+                        <EarliestRetireRead
+                          age={earliestAge}
+                          planRetireAge={inputs.person.retirementAge}
+                          targetSpend={target}
+                          maxAge={inputs.person.maxAge}
+                          loading={solvingAge}
+                        />
+                      </div>
                     )}
                     <div style={{ paddingTop: 8 }}>
                       <div className="label" style={{ marginBottom: 12 }}>your levers · edit anything</div>
