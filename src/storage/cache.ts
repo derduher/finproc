@@ -33,9 +33,16 @@ function stableJson(value: unknown): string {
   })
 }
 
+/**
+ * Output-shape version. Bump whenever `MonteCarloResult` gains/changes fields so
+ * that entries written by an older build (missing e.g. `samplePaths`,
+ * `p90EndBalance`, `shortfallByPercentile`) are never served to newer UI.
+ */
+const CACHE_VERSION = 2
+
 /** Derive a deterministic cache key from simulation inputs. */
 export function getCacheKey(inputs: SimulationInputs): string {
-  return `mc:${djb2(stableJson(inputs))}`
+  return `mc:v${CACHE_VERSION}:${djb2(stableJson(inputs))}`
 }
 
 /** Retrieve a cached result, or undefined on miss. */

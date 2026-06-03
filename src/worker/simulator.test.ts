@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { simulate } from './simulator'
+import { simulate, sustainableSpend } from './simulator'
 import { defaultInputs, WithdrawalStrategy } from '../schema'
 
 const BASE_INPUTS = {
@@ -52,6 +52,14 @@ describe('simulate — Comlink wrapper', () => {
     const r2 = await simulate(inp2, 50)
     // Different seeds → different p50
     expect(r1.p50EndBalance).not.toBe(r2.p50EndBalance)
+  })
+})
+
+describe('sustainableSpend — Comlink wrapper', () => {
+  it('returns a positive sustainable spend that meets the target', async () => {
+    const res = await sustainableSpend(BASE_INPUTS, 0.9, { runCount: 150 })
+    expect(res.spend).toBeGreaterThan(0)
+    expect(res.successRate).toBeGreaterThanOrEqual(0.85)
   })
 })
 
