@@ -136,6 +136,33 @@ export function EarliestRetireRead({
   )
 }
 
+/**
+ * Actionable "save $X more / month" read (#10 family) — shown when the plan is
+ * underfunded. `extraMonthly` is null while solving; 0 means already on track.
+ */
+export function SaveMoreRead({
+  extraMonthly,
+  loading,
+  targetSpend,
+  planRetireAge,
+}: {
+  extraMonthly: number | null
+  loading: boolean
+  targetSpend: number
+  planRetireAge: number
+}) {
+  if (extraMonthly === null) {
+    return loading ? <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--ink-3)' }}>solving for the saving needed…</div> : null
+  }
+  if (extraMonthly <= 0) return null
+  return (
+    <div style={{ marginTop: 8, fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+      Or hold {planRetireAge} and {fmt(targetSpend)}/yr by saving{' '}
+      <b className="num" style={{ color: 'var(--ink)' }}>~{fmt(extraMonthly)}/mo</b> more.
+    </div>
+  )
+}
+
 /** Demoted secondary metric — the old hero, now a quiet chip. */
 export function HoldChip({ reads }: { reads: OutcomeReads }) {
   return (

@@ -52,6 +52,45 @@ export function AssumptionBar({
   )
 }
 
+/** Today's-dollars (real) vs future-dollars (nominal) for the chart + distribution reads. */
+export function DollarModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: 'nominal' | 'real'
+  onChange: (m: 'nominal' | 'real') => void
+}) {
+  const seg = (m: 'nominal' | 'real', label: string, title: string) => {
+    const on = mode === m
+    return (
+      <button
+        type="button"
+        onClick={() => onChange(m)}
+        aria-pressed={on}
+        title={title}
+        style={{
+          font: 'inherit',
+          fontSize: 12,
+          padding: '4px 11px',
+          border: 'none',
+          cursor: 'pointer',
+          background: on ? 'var(--ink)' : 'transparent',
+          color: on ? 'var(--bg)' : 'var(--ink-3)',
+          fontWeight: on ? 500 : 400,
+        }}
+      >
+        {label}
+      </button>
+    )
+  }
+  return (
+    <div role="group" aria-label="Dollar basis" style={{ display: 'inline-flex', border: '1px solid var(--line)', borderRadius: 999, overflow: 'hidden' }}>
+      {seg('real', "today's $", 'Inflation-adjusted to present-day purchasing power')}
+      {seg('nominal', 'future $', 'Raw projected dollars, not adjusted for inflation')}
+    </div>
+  )
+}
+
 /** Flat vs guardrails spending policy. */
 export function ModeToggle({
   mode,
