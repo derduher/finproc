@@ -11,6 +11,7 @@
  * Pure/presentational: it renders whatever `samplePaths` + `median` it's given
  * (already deflated to the active display mode by the caller).
  */
+import { useState } from 'react'
 import { formatMoneyAbbreviated } from '../../math'
 import type { SamplePath } from '../../sim/montecarlo'
 
@@ -18,6 +19,43 @@ export interface PathExpenseMarker {
   age: number
   amount: number
   label?: string
+}
+
+export interface ColumnSummary {
+  age: number
+  /** Median balance at this age. */
+  median: number
+  /** ~10th percentile across the shown paths. */
+  lo: number
+  /** ~90th percentile across the shown paths. */
+  hi: number
+  /** How many of the shown paths have run short by this age. */
+  depleted: number
+  total: number
+}
+
+/**
+ * Summarise one year-column of the spaghetti chart for the hover readout (#4):
+ * the median, the spread across the shown sample paths, and how many have
+ * depleted by that age. Pure + index-clamped so it never produces NaN.
+ */
+export function summarizeColumn(
+  pathValues: number[][],
+  medianSeries: number[],
+  samplePaths: Pick<SamplePath, 'depleteAge'>[],
+  ages: number[],
+  idx: number,
+): ColumnSummary {
+  const i = Math.min(Math.max(idx, 0), Math.max(ages.length - 1, 0))
+  const age = ages[i] ?? 0
+  const vals = pathValues.map((s) => s[i] ?? 0).slice().sort((a, b) => a - b)
+  const q = (p: number) => {
+    if (vals.length === 0) return 0
+    const k = Math.min(vals.length - 1, Math.max(0, Math.round(p * (vals.length - 1))))
+    return vals[k]
+  }
+  const depleted = samplePaths.filter((p) => p.depleteAge !== undefined && p.depleteAge <= age).length
+  return { age, median: medianSeries[i] ?? 0, lo: q(0.1), hi: q(0.9), depleted, total: samplePaths.length }
 }
 
 export interface PathsChartProps {
@@ -65,6 +103,7 @@ export function PathsChart({
   showRetire = true,
   showExpenses = true,
 }: PathsChartProps) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const pad = inline ? { l: 30, r: 12, t: 12, b: 22 } : { l: 58, r: 18, t: 16, b: 34 }
   const cw = width - pad.l - pad.r
   const ch = height - pad.t - pad.b
@@ -139,6 +178,18 @@ export function PathsChart({
   const ageTicks = [currentAge, retireAge, ssAge, maxAge].filter(
     (a): a is number => a != null,
   )
+
+  // Map a pointer position over the plot rect to the nearest year-column (#4).
+  // The overlay rect spans exactly the plot area, so the fraction is scale-correct
+  // regardless of the SVG's responsive sizing. age(frac) = currentAge + frac*span,
+  // and ages[i] = ages[0] + i, so i = round(age - ages[0]).
+  const onPointerScrub = (e: React.PointerEvent<SVGRectElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (rect.width === 0) return
+    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+    const i = Math.round(currentAge + frac * span - ages[0])
+    setHoverIdx(i >= 0 && i < ages.length ? i : null)
+  }
 
   return (
     <svg
@@ -254,6 +305,46 @@ export function PathsChart({
               `${samplePaths.length} of runs shown · ${depleteCount > 0 ? `${Math.round((depleteCount / samplePaths.length) * 100)}% run short` : 'all hold'}`}
           </text>
         </g>
+      )}
+
+      {/* hover/scrub readout (#4) */}
+      {!inline && hoverIdx != null && (() => {
+        const sum = summarizeColumn(pathSeries, medianSeries, samplePaths, ages, hoverIdx)
+        const hx = x(ages[hoverIdx])
+        const my = y(sum.median)
+        const boxW = 172
+        const boxH = sum.depleted > 0 ? 80 : 64
+        const bx = Math.min(Math.max(hx + 12, pad.l), pad.l + cw - boxW)
+        const by = pad.t + 8
+        return (
+          <g pointerEvents="none">
+            <line x1={hx} y1={pad.t} x2={hx} y2={pad.t + ch} stroke="var(--ink-2)" strokeWidth="1" strokeDasharray="2 3" />
+            <circle cx={hx} cy={my} r="3.5" fill="var(--chart-line)" stroke="var(--bg)" strokeWidth="1" />
+            <rect x={bx} y={by} width={boxW} height={boxH} rx="7" fill="var(--bg-elev)" stroke="var(--line)" strokeWidth="1" />
+            <text x={bx + 12} y={by + 19} fontFamily="var(--font-body)" fontSize="11" fill="var(--ink-3)">age {sum.age}</text>
+            <text x={bx + 12} y={by + 38} fontFamily="var(--font-mono)" fontSize="13" fill="var(--ink)">median {formatMoneyAbbreviated(sum.median)}</text>
+            <text x={bx + 12} y={by + 54} fontFamily="var(--font-body)" fontSize="11" fill="var(--ink-3)">most land {formatMoneyAbbreviated(sum.lo)}–{formatMoneyAbbreviated(sum.hi)}</text>
+            {sum.depleted > 0 && (
+              <text x={bx + 12} y={by + 71} fontFamily="var(--font-body)" fontSize="11" fill="var(--bad)">{sum.depleted} of {sum.total} run short by here</text>
+            )}
+          </g>
+        )
+      })()}
+
+      {/* transparent scrub surface — drawn last so it captures pointer/touch over
+          the whole plot; the readout above sits on top with pointerEvents none. */}
+      {!inline && (
+        <rect
+          x={pad.l}
+          y={pad.t}
+          width={cw}
+          height={ch}
+          fill="transparent"
+          style={{ touchAction: 'pan-y', cursor: 'crosshair' }}
+          onPointerMove={onPointerScrub}
+          onPointerDown={onPointerScrub}
+          onPointerLeave={() => setHoverIdx(null)}
+        />
       )}
     </svg>
   )

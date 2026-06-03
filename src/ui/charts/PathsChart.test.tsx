@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { PathsChart } from './PathsChart'
+import { PathsChart, summarizeColumn } from './PathsChart'
 import type { SamplePath } from '../../sim/montecarlo'
 
 const paths: SamplePath[] = [
@@ -77,5 +77,30 @@ describe('PathsChart', () => {
     // still renders cleanly with the extra leading point
     expect(container.querySelector('svg')).not.toBeNull()
     expect(container.querySelectorAll('path').length).toBeGreaterThanOrEqual(paths.length)
+  })
+})
+
+describe('summarizeColumn (#4 hover readout)', () => {
+  const series = paths.map((p) => p.balances)
+  const ages = [65, 66, 67, 68]
+
+  it('reports age, median, spread and depletion count at a column', () => {
+    const s = summarizeColumn(series, median, paths, ages, 3) // age 68
+    expect(s.age).toBe(68)
+    expect(s.median).toBe(70)
+    expect(s.total).toBe(3)
+    expect(s.depleted).toBe(1) // the path that runs short at 68
+    expect(s.lo).toBeLessThanOrEqual(s.hi)
+  })
+
+  it('counts no depletions before the short age', () => {
+    const s = summarizeColumn(series, median, paths, ages, 1) // age 66
+    expect(s.depleted).toBe(0)
+  })
+
+  it('clamps an out-of-range index without NaN', () => {
+    const s = summarizeColumn(series, median, paths, ages, 99)
+    expect(Number.isFinite(s.median)).toBe(true)
+    expect(Number.isFinite(s.lo)).toBe(true)
   })
 })
