@@ -22,6 +22,9 @@ const fakeResult: MonteCarloResult = {
   p50EndBalance: 2_400_000,
   p10EndBalance: 310_000,
   medianDepleteAge: undefined,
+  p90EndBalance: 0,
+  samplePaths: [],
+  shortfallByPercentile: [],
   yearlyResults: Array.from({ length: 64 }, (_, i) => ({
     age: 32 + i,
     p10: 300_000 + i * 5_000,

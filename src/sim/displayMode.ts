@@ -44,10 +44,21 @@ export function deflateResult(
   const currentAge = inputs.person.currentAge
   const lastIdx = deflators.length - 1
   const factorAt = (age: number) => deflators[Math.max(0, Math.min(lastIdx, age - currentAge))]
+  const endFactor = factorAt(inputs.person.maxAge)
   return {
     ...result,
-    p50EndBalance: result.p50EndBalance * factorAt(inputs.person.maxAge),
-    p10EndBalance: result.p10EndBalance * factorAt(inputs.person.maxAge),
+    p50EndBalance: result.p50EndBalance * endFactor,
+    p10EndBalance: result.p10EndBalance * endFactor,
+    // Sample-path balances are per-year, aligned to yearlyResults ages. Shortfall
+    // percentiles are ages (not dollars), so they pass through unchanged.
+    // Guard against legacy cached results that predate these fields.
+    p90EndBalance: result.p90EndBalance != null ? result.p90EndBalance * endFactor : result.p90EndBalance,
+    samplePaths: (result.samplePaths ?? []).map((p) => ({
+      ...p,
+      balances: p.balances.map(
+        (b, i) => b * factorAt(result.yearlyResults[i]?.age ?? currentAge + i + 1),
+      ),
+    })),
     yearlyResults: result.yearlyResults.map((r) => {
       const f = factorAt(r.age)
       return {

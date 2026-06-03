@@ -18,6 +18,9 @@ const MOCK_RESULT: MonteCarloResult = {
   p50EndBalance: 500_000,
   p10EndBalance: 200_000,
   medianDepleteAge: undefined,
+  p90EndBalance: 0,
+  samplePaths: [],
+  shortfallByPercentile: [],
 }
 
 describe('cache — key determinism', () => {

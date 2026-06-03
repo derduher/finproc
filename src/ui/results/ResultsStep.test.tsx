@@ -12,7 +12,16 @@ const fakeResult: MonteCarloResult = {
   successRate: 0.84,
   p50EndBalance: 2_400_000,
   p10EndBalance: 310_000,
+  p90EndBalance: 6_000_000,
   medianDepleteAge: 84,
+  samplePaths: [
+    { balances: Array.from({ length: 64 }, (_, i) => 500_000 + i * 20_000), depleteAge: undefined, cutYears: [], raiseYears: [] },
+  ],
+  shortfallByPercentile: [
+    { fraction: 0.01, age: undefined },
+    { fraction: 0.1, age: undefined },
+    { fraction: 0.5, age: 84 },
+  ],
   yearlyResults: Array.from({ length: 64 }, (_, i) => ({
     age: 32 + i,
     p10: Math.max(0, 300_000 + i * 5_000),

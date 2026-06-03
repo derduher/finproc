@@ -18,6 +18,9 @@ function makeResult(overrides: Partial<MonteCarloResult> = {}): MonteCarloResult
     p50EndBalance: 2_400_000,
     p10EndBalance: 310_000,
     medianDepleteAge: undefined,
+    p90EndBalance: 0,
+    samplePaths: [],
+    shortfallByPercentile: [],
     yearlyResults,
     ...overrides,
   }
