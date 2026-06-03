@@ -70,6 +70,11 @@ export function PathsChart({
   const ch = height - pad.t - pad.b
 
   const n = samplePaths[0]?.balances.length ?? 0
+  // Nothing to draw yet (e.g. a transient empty result) — render an empty frame
+  // rather than feeding NaN coordinates into the SVG.
+  if (n === 0 || samplePaths.length === 0) {
+    return <svg width={width} height={height} role="img" aria-label="Projected portfolio paths" />
+  }
   const hasStart = startBalance != null
   // Age for each plotted point (optionally prepend the starting age).
   const ages: number[] = []
@@ -86,7 +91,11 @@ export function PathsChart({
   for (const s of pathSeries) for (const v of s) allVals.push(v)
   allVals.sort((a, b) => a - b)
   const lastMedian = medianSeries[medianSeries.length - 1] ?? 0
-  const cap = Math.max(allVals[Math.floor(allVals.length * yCapPctl)] || 1, lastMedian * 1.2, 1)
+  const cap = Math.max(
+    allVals[Math.floor(allVals.length * yCapPctl)] || 1,
+    Number.isFinite(lastMedian) ? lastMedian * 1.2 : 1,
+    1,
+  )
 
   const span = Math.max(1, maxAge - currentAge)
   const x = (age: number) => pad.l + ((age - currentAge) / span) * cw
