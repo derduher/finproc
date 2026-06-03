@@ -9,13 +9,15 @@ import { useState } from 'react'
 import { useStore } from '../../store'
 import { useSimulation } from '../../hooks/useSimulation'
 import { useSustainableSpend } from '../../hooks/useSustainableSpend'
+import { useEarliestRetirementAge } from '../../hooks/useEarliestRetirementAge'
+import { useRequiredExtraSavings } from '../../hooks/useRequiredExtraSavings'
 import { deflateResult } from '../../sim/displayMode'
 import { deriveOutcomeReads } from '../../sim/outcome'
 import { formatMoneyAbbreviated as fmt } from '../../math'
 import { TopBar2 } from './TopBar2'
 import { CoreLevers, totalSaved } from './CoreLevers'
-import { SustainableHero, RiskRead, SurplusRead, HoldChip } from './Outcomes'
-import { AssumptionBar, ModeToggle } from './Assumptions'
+import { SustainableHero, RiskRead, SurplusRead, HoldChip, EarliestRetireRead, SaveMoreRead } from './Outcomes'
+import { AssumptionBar, ModeToggle, DollarModeToggle } from './Assumptions'
 import { PathsChart, type PathExpenseMarker } from '../charts/PathsChart'
 import { GuardrailTimeline } from '../charts/GuardrailTimeline'
 import { AdvancedDrawer } from './AdvancedDrawer'
@@ -40,11 +42,16 @@ function representativePath(result: MonteCarloResult) {
 export function MainScreen() {
   const inputs = useStore((s) => s.inputs)
   const displayMode = useStore((s) => s.ui.displayMode)
+  const setDisplayMode = useStore((s) => s.setDisplayMode)
   const patchInputs = useStore((s) => s.patchInputs)
   const [drawer, setDrawer] = useState<null | 'advanced' | 'methodology'>(null)
 
   const { result: rawResult, loading } = useSimulation(inputs)
   const { spend } = useSustainableSpend(inputs)
+  const { age: earliestAge, loading: solvingAge } = useEarliestRetirementAge(inputs)
+  // Only solve "save more" when the target spend exceeds what's sustainable.
+  const underfunded = spend != null && inputs.annualExpenses > spend
+  const { extraMonthly, loading: solvingSave } = useRequiredExtraSavings(inputs, underfunded)
 
   const CHART_W = 1320
   const guardrails = inputs.spendingPolicy === 'guardrails'
@@ -87,7 +94,24 @@ export function MainScreen() {
                         <div className="micro" style={{ marginTop: 8 }}>solving for your sustainable spend…</div>
                       </div>
                     ) : (
-                      <SustainableHero reads={reads} />
+                      <div>
+                        <SustainableHero reads={reads} />
+                        <EarliestRetireRead
+                          age={earliestAge}
+                          planRetireAge={inputs.person.retirementAge}
+                          targetSpend={target}
+                          maxAge={inputs.person.maxAge}
+                          loading={solvingAge}
+                        />
+                        {underfunded && (
+                          <SaveMoreRead
+                            extraMonthly={extraMonthly}
+                            loading={solvingSave}
+                            targetSpend={target}
+                            planRetireAge={inputs.person.retirementAge}
+                          />
+                        )}
+                      </div>
                     )}
                     <div style={{ paddingTop: 8 }}>
                       <div className="label" style={{ marginBottom: 12 }}>your levers · edit anything</div>
@@ -104,10 +128,13 @@ export function MainScreen() {
                           Each thin line is one market history. Returns vary year to year, so the order of good and bad years matters.
                         </div>
                       </div>
-                      <ModeToggle
-                        mode={guardrails ? 'guardrails' : 'flat'}
-                        onChange={(m) => patchInputs({ spendingPolicy: m })}
-                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+                        <DollarModeToggle mode={displayMode} onChange={setDisplayMode} />
+                        <ModeToggle
+                          mode={guardrails ? 'guardrails' : 'flat'}
+                          onChange={(m) => patchInputs({ spendingPolicy: m })}
+                        />
+                      </div>
                     </div>
                     <PathsChart
                       samplePaths={result.samplePaths}

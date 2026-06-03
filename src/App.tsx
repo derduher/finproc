@@ -47,6 +47,16 @@ export default function App() {
     }
   }, [initialInputs, initialUiPrefs, setInputs, setAesthetic, setTheme, setDensity])
 
+  // Mirror the active theme onto <html> so the document background (and the
+  // iOS/iPad overscroll "rubber-band" area) resolves the themed --bg instead of
+  // an unthemed white band (#5). The token selectors ([data-aesthetic]) are global.
+  useEffect(() => {
+    const root = document.documentElement
+    root.setAttribute('data-aesthetic', aesthetic)
+    root.setAttribute('data-theme', theme)
+    root.setAttribute('data-density', density)
+  }, [aesthetic, theme, density])
+
   // Sync inputs + UI prefs to URL whenever any change. The `onCommit` callback
   // records when the debounced write lands, driving "auto-saved Ns ago".
   useEffect(() => {

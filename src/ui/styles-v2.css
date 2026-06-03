@@ -92,15 +92,20 @@
   height: 26px;
   padding: 0 10px 0 8px;
   border-radius: var(--radius-pill);
+  font-family: var(--font-body);
   font-size: var(--t-xs);
+  line-height: 1;
   background: var(--bg-sunk);
   color: var(--ink-2);
   border: 1px solid var(--line);
   cursor: pointer;
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
   transition: border-color .12s, color .12s;
 }
 .hf .achip:hover { border-color: var(--line-strong); color: var(--ink); }
+.hf .achip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hf .achip .bias {
   display: inline-flex; align-items: center; justify-content: center;
   width: 16px; height: 16px; border-radius: 999px;
@@ -172,7 +177,7 @@
 .hf .ldot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: middle; }
 
 /* ── Main screen responsive layout ────────────────────────────────── */
-.hf .v2-screen { padding: 36px 56px 40px; }
+.hf .v2-screen { padding: 36px 56px 40px; overscroll-behavior: contain; }
 .hf .v2-hero-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 48px; align-items: start; margin-bottom: 30px; }
 .hf .v2-chart-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 6px; }
 .hf .v2-outcome-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 16px; }
