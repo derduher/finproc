@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import './tokens.css';
 @import './styles.css';
+@import './styles-v2.css';
 
 /* Global resets */
 *, *::before, *::after {
