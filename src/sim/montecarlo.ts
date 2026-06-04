@@ -133,21 +133,11 @@ export function runMonteCarlo(
     if (onProgress && (run % projectInterval === 0 || run === runCount - 1)) {
       onProgress({ stage: 'project', done: run, total: runCount })
     }
-    // Build a per-year rate schedule: each year draws an independent return and
-    // inflation from its active segment's distribution. This is what restores
-    // sequence-of-returns risk — a bad draw early in retirement is no longer
-    // indistinguishable from the same average spread out over the whole horizon.
-    // (Drawing a fresh value per year, rather than blocks of correlated years, is
-    // the documented IID simplification; the schedule shape leaves room to swap in
-    // a block-bootstrap sampler later without touching the projection.)
-    const yearlyRates: SampledRates[] = new Array(years)
-    for (let y = 0; y < years; y++) {
-      const seg = activeSegment(segments, person.currentAge + y)
-      yearlyRates[y] = {
-        stockGrowth: boxMullerNormal(seg.growthMean, seg.growthSigma, rng),
-        inflation: boxMullerNormal(seg.inflationMean, seg.inflationSigma, rng),
-      }
-    }
+    // Build a per-year rate schedule with year-to-year serial correlation
+    // (`buildRateSchedule`). Per-year draws restore sequence-of-returns risk; the
+    // AR(1) persistence layer makes a crash year tend to be followed by another,
+    // and keeps inflation regimes sticky — IID alone *understates* sequence risk.
+    const yearlyRates = buildRateSchedule(segments, person.currentAge, years, rng)
     const result = runSingleProjection(inputs, yearlyRates)
 
     if (result.succeeded) {
@@ -216,12 +206,73 @@ export function runMonteCarlo(
 }
 
 /** A rate segment's distribution params plus the age from which it applies. */
-interface RateSegment {
+export interface RateSegment {
   startAge: number
   growthMean: number
   growthSigma: number
   inflationMean: number
   inflationSigma: number
+}
+
+/** Lag-1 serial correlation applied to the standardized return / inflation shocks. */
+export interface RatePersistence {
+  /** Year-to-year autocorrelation of equity returns (multi-year bear/bull runs). */
+  stock: number
+  /** Year-to-year autocorrelation of inflation (empirically high). */
+  inflation: number
+}
+
+/**
+ * Default serial-correlation coefficients. The previous IID behavior is exactly
+ * the `{ stock: 0, inflation: 0 }` special case.
+ *
+ * Equity returns get a modest positive coefficient: annual returns are close to a
+ * random walk, but bear/bull markets persist across years, and pure IID lets a
+ * crash year stand alone — *understating* sequence-of-returns risk. Inflation gets
+ * a much larger coefficient: realized inflation is strongly persistent (high-
+ * inflation regimes last years, e.g. the 1970s), which IID sampling erased. The
+ * coefficients only reshape the *path*; each year's marginal distribution (the
+ * user's P10/P90 spread) is preserved exactly.
+ */
+export const DEFAULT_PERSISTENCE: RatePersistence = { stock: 0.15, inflation: 0.65 }
+
+/**
+ * Build a per-year `SampledRates` schedule with AR(1) serial correlation.
+ *
+ * Each stream carries a standardized state `z` across years (and across segment
+ * breakpoints): `zₜ = ρ·zₜ₋₁ + √(1−ρ²)·εₜ`, with `εₜ` an independent standard
+ * normal and `z₀ = ε₀`. This keeps every year marginally `N(0,1)` — so converting
+ * by the active segment's `mean + sigma·z` preserves that segment's distribution
+ * exactly — while giving consecutive years lag-1 correlation `ρ`. With `ρ = 0` the
+ * recursion collapses to `zₜ = εₜ`, reproducing the plain per-year IID draws.
+ *
+ * Draw order (stock shock, then inflation shock, per year) matches the prior IID
+ * loop, so `{ stock: 0, inflation: 0 }` is bit-for-bit identical to the old path.
+ */
+export function buildRateSchedule(
+  segments: RateSegment[],
+  startAge: number,
+  years: number,
+  rng: () => number,
+  persistence: RatePersistence = DEFAULT_PERSISTENCE,
+): SampledRates[] {
+  const schedule: SampledRates[] = new Array(years)
+  const kStock = Math.sqrt(1 - persistence.stock ** 2)
+  const kInfl = Math.sqrt(1 - persistence.inflation ** 2)
+  let zStock = 0
+  let zInfl = 0
+  for (let y = 0; y < years; y++) {
+    const eStock = boxMullerNormal(0, 1, rng)
+    const eInfl = boxMullerNormal(0, 1, rng)
+    zStock = y === 0 ? eStock : persistence.stock * zStock + kStock * eStock
+    zInfl = y === 0 ? eInfl : persistence.inflation * zInfl + kInfl * eInfl
+    const seg = activeSegment(segments, startAge + y)
+    schedule[y] = {
+      stockGrowth: seg.growthMean + seg.growthSigma * zStock,
+      inflation: seg.inflationMean + seg.inflationSigma * zInfl,
+    }
+  }
+  return schedule
 }
 
 /**
