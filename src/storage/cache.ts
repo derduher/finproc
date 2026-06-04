@@ -34,11 +34,12 @@ function stableJson(value: unknown): string {
 }
 
 /**
- * Output-shape version. Bump whenever `MonteCarloResult` gains/changes fields so
- * that entries written by an older build (missing e.g. `samplePaths`,
- * `p90EndBalance`, `shortfallByPercentile`) are never served to newer UI.
+ * Output-shape version. Bump whenever `MonteCarloResult` gains/changes fields, or
+ * when the simulation math changes so prior results would be stale, so that
+ * entries written by an older build are never served to newer UI.
+ * v3: cumulative-inflation fix (flows now track the realized price level).
  */
-const CACHE_VERSION = 2
+const CACHE_VERSION = 3
 
 /** Derive a deterministic cache key from simulation inputs. */
 export function getCacheKey(inputs: SimulationInputs): string {

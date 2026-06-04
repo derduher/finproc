@@ -134,6 +134,13 @@ export function runSingleProjection(
   let depleteAge: number | undefined = undefined
   let depleted = false
 
+  // Realized cumulative price level (∏ of each year's drawn inflation). All
+  // present-dollar flows (expenses, Social Security, one-time costs) are converted
+  // to nominal by THIS factor, not by a single year's rate raised to y — the two
+  // only agree when inflation is constant. `priceLevel` is the level accrued over
+  // the years BEFORE the current one, so year 0 spends today's dollars unscaled.
+  let cumInflation = 1
+
   for (let y = 0; y < years; y++) {
     const yearStartAge = startAge + y
     const yearEndAge = startAge + y + 1
@@ -166,6 +173,12 @@ export function runSingleProjection(
     const monthlyGrowthRate = annualToMonthlyRate(growthRate)
     const yearsFromStart = y
 
+    // Price level applied to this year's flows = inflation accrued over prior
+    // years. Advance the running product immediately so it's updated on every
+    // path (including depletion years), keeping the level monotonic.
+    const priceLevel = cumInflation
+    cumInflation *= 1 + inflationRate
+
     // Salary for this year (inflation-adjusted using salary growth rate)
     const annualSalary = inflate(
       person.annualSalary,
@@ -190,33 +203,27 @@ export function runSingleProjection(
 
     // Annual withdrawal phase
     if (!depleted) {
-      const inflatedExpenses = inflate(annualExpenses, 0, yearsFromStart, inflationRate)
+      const inflatedExpenses = annualExpenses * priceLevel
 
-      // Social Security income (treated as fully tax-free per spec)
+      // Social Security income (treated as fully tax-free per spec). Entered in
+      // present dollars, so it holds today's purchasing power: convert by the
+      // realized price level from the start, not from claim age.
       let ssIncome = 0
       if (socialSecurity && yearEndAge > socialSecurity.claimAge) {
-        const yearsFromClaim = yearEndAge - socialSecurity.claimAge
-        ssIncome = inflate(
-          socialSecurity.annualAmountPresentDollars,
-          0,
-          yearsFromClaim,
-          inflationRate,
-        )
+        ssIncome = socialSecurity.annualAmountPresentDollars * priceLevel
       }
       socialSecurityThisYear = ssIncome
 
-      // One-time expenses due this year
+      // One-time expenses due this year (present dollars → nominal by price level)
       let oneTimeTotal = 0
       for (const ote of oneTimeExpenses) {
         // Lump-sum at event age
         if (ote.age === yearStartAge) {
-          const yearsToEvent = yearStartAge - startAge
-          oneTimeTotal += inflate(ote.amountPresentDollars, 0, yearsToEvent, inflationRate)
+          oneTimeTotal += ote.amountPresentDollars * priceLevel
         }
         // Recurring follow-on: active every year from event age onward
         if (ote.recurringFollowOnAmount !== undefined && yearStartAge >= ote.age) {
-          const yearsFromEvent = yearStartAge - ote.age
-          oneTimeTotal += inflate(ote.recurringFollowOnAmount, 0, yearsFromEvent, inflationRate)
+          oneTimeTotal += ote.recurringFollowOnAmount * priceLevel
         }
       }
 
