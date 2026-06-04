@@ -264,17 +264,31 @@ export interface RatePersistence {
 export const DEFAULT_PERSISTENCE: RatePersistence = { stock: 0.15, inflation: 0.65 }
 
 /**
- * Build a per-year `SampledRates` schedule with AR(1) serial correlation.
+ * Default contemporaneous correlation between the equity-return and inflation
+ * shocks (#9). Negative: high-inflation years historically depress nominal equity
+ * returns (the 1970s), so the previous independent sampling understated the joint
+ * "stagflation" risk where both move against the retiree at once. Like the
+ * persistence coefficients it only reshapes the joint *path* — each stream's
+ * marginal distribution (the user's P10/P90 spread) is preserved exactly. `0`
+ * reproduces the prior independent draws.
+ */
+export const DEFAULT_RATE_CORRELATION = -0.35
+
+/**
+ * Build a per-year `SampledRates` schedule with AR(1) serial correlation and a
+ * contemporaneous return↔inflation correlation.
  *
  * Each stream carries a standardized state `z` across years (and across segment
- * breakpoints): `zₜ = ρ·zₜ₋₁ + √(1−ρ²)·εₜ`, with `εₜ` an independent standard
- * normal and `z₀ = ε₀`. This keeps every year marginally `N(0,1)` — so converting
- * by the active segment's `mean + sigma·z` preserves that segment's distribution
- * exactly — while giving consecutive years lag-1 correlation `ρ`. With `ρ = 0` the
- * recursion collapses to `zₜ = εₜ`, reproducing the plain per-year IID draws.
+ * breakpoints): `zₜ = ρ·zₜ₋₁ + √(1−ρ²)·εₜ`, with `z₀ = ε₀`. The innovations
+ * `εₜ` are drawn jointly so that `corr(εStock, εInfl) = correlation` (Cholesky:
+ * `εInfl = c·εStock + √(1−c²)·η`). Each `εₜ` and `zₜ` stays marginally `N(0,1)`,
+ * so converting by the active segment's `mean + sigma·z` preserves that segment's
+ * distribution exactly — only the joint structure (autocorrelation across years +
+ * cross-correlation within a year) changes. With `persistence = {0,0}` and
+ * `correlation = 0` the schedule reduces to the plain independent per-year draws.
  *
- * Draw order (stock shock, then inflation shock, per year) matches the prior IID
- * loop, so `{ stock: 0, inflation: 0 }` is bit-for-bit identical to the old path.
+ * Draw order (stock shock, then inflation shock, per year) matches the prior loop,
+ * so `{0,0}` persistence with `0` correlation is bit-for-bit identical.
  */
 export function buildRateSchedule(
   segments: RateSegment[],
@@ -282,15 +296,18 @@ export function buildRateSchedule(
   years: number,
   rng: () => number,
   persistence: RatePersistence = DEFAULT_PERSISTENCE,
+  correlation: number = DEFAULT_RATE_CORRELATION,
 ): SampledRates[] {
   const schedule: SampledRates[] = new Array(years)
   const kStock = Math.sqrt(1 - persistence.stock ** 2)
   const kInfl = Math.sqrt(1 - persistence.inflation ** 2)
+  const cInfl = Math.sqrt(1 - correlation ** 2)
   let zStock = 0
   let zInfl = 0
   for (let y = 0; y < years; y++) {
+    // Jointly-distributed standard-normal innovations with corr = `correlation`.
     const eStock = boxMullerNormal(0, 1, rng)
-    const eInfl = boxMullerNormal(0, 1, rng)
+    const eInfl = correlation * eStock + cInfl * boxMullerNormal(0, 1, rng)
     zStock = y === 0 ? eStock : persistence.stock * zStock + kStock * eStock
     zInfl = y === 0 ? eInfl : persistence.inflation * zInfl + kInfl * eInfl
     const seg = activeSegment(segments, startAge + y)

@@ -427,7 +427,7 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
               onMin={(v) => patchInputs({ initialInflationMin: v })}
               onMax={(v) => patchInputs({ initialInflationMax: v })}
             />
-            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>Sampled fresh each year, so sequence-of-returns risk is modeled. Historical averages run optimistic at today's valuations.</div>
+            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>Sampled fresh each year (sequence-of-returns risk modeled), with returns and inflation negatively correlated so high-inflation years tend to be low-return years. Historical averages run optimistic at today's valuations.</div>
           </Acc>
         </div>
 

@@ -55,7 +55,7 @@ Status legend: ✅ done · ◑ partial · ⬜ not started.
 | 6 | **P1** | ✅ | Insights @100 runs / sensitivity @200–400 runs report deltas inside MC noise | Risk, Transparency | S |
 | 7 | **P2** | ⬜ | "Retirement age" tornado bar actually perturbs `currentAge`; contribution-amount row missing | Transparency | S |
 | 8 | **P2** | ✅ | Flat marginal tax, SS tax-free, no 0% LTCG bracket, no bracket-filling. **Done: progressive withdrawal-phase tax** — standard deduction + statutory ordinary brackets, partial SS taxation (provisional income), 0/15/20% LTCG stacked on ordinary income; filing-status aware; brackets track inflation. | Accuracy | M |
-| 9 | **P2** | ⬜ | Independent inflation/return sampling; no valuation-aware starting return | Accuracy | M |
+| 9 | **P2** | ✅ | Independent inflation/return sampling; no valuation-aware starting return. **Done: negative return↔inflation correlation** in the sampler (stagflation risk); historical-average optimism surfaced as an assumption + drawer caption. Valuation-aware *level* stays user-driven (P10/P90 inputs). | Accuracy | M |
 | 10 | **P2** | ✅ | Deterministic `maxAge` = no longevity risk distribution. **Done: optional stochastic mortality** — each run draws an age at death from a Gompertz model, so the success rate is an expectation over lifespans, not a verdict against one arbitrary horizon. Opt-in (`longevity: 'stochastic'`); fixed remains the default. | Risk | M |
 | 11 | **P2** | ✅ | Flat-real lifetime spending; no dynamic/guardrail withdrawals | Accuracy, Risk | M |
 | 12 | **P3** | ⬜ | Frozen nominal IRS limits, no catch-up; mid-month convention not implemented | Accuracy | S |
@@ -279,6 +279,23 @@ inflation ↔ depressed real returns; 1970s). And "use the historical average re
 known optimism bias at high valuations (CAPE). **Fix:** correlate inflation/return draws
 (falls out naturally from block-bootstrap in #1); add guidance/tooltip that historical-average
 defaults skew optimistic.
+
+**✅ Done — return↔inflation correlation + optimism guidance.** `buildRateSchedule`
+([`montecarlo.ts`](../src/sim/montecarlo.ts)) now draws the equity-return and inflation innovations
+*jointly* (Cholesky: `εInfl = c·εStock + √(1−c²)·η`) with a default `c = −0.35`, so a high-inflation
+year tends to be a low nominal-return year — the "stagflation" co-movement (the 1970s) that
+independent sampling erased, and which understated the joint risk of both moving against the retiree
+at once. Persistence (#1b) attenuates but doesn't flip the realized correlation (~−0.29). Each
+stream's marginal (the user's P10/P90) is preserved exactly — `c = 0` reproduces the prior
+independent draws — so this only reshapes the *joint path*. Tested by pinning the schedule's Pearson
+correlation (negative under default, ~0 at `c = 0`) and the preserved marginals.
+
+The **valuation-aware level** is handled by transparency rather than an engine override, consistent
+with the user-driven distribution model: the "Historical returns · optimistic at today's valuations"
+assumption chip and the Market-returns drawer caption flag the CAPE optimism, and a worried user
+lowers their own P10/P90 return inputs (a baked-in CAPE haircut would silently override the
+assumptions the whole model is built on — the same reasoning as choosing parametric AR(1) over a
+historical block-bootstrap in #1b).
 
 ### 10. Deterministic `maxAge` = no longevity risk
 `maxAge` is a hard death date; 95→100 swung success 60.4%→55.7% in testing — an arbitrary input
