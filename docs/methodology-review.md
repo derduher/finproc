@@ -53,7 +53,7 @@ Status legend: ✅ done · ◑ partial · ⬜ not started.
 | 4 | **P1** | ✅ | Employer match wrongly subtracted from take-home pre-retirement | Accuracy | S |
 | 5 | **P1** | ✅ | Traditional dollars effectively double-taxed (contrib not pre-tax, then grossed-up on exit) | Accuracy | M |
 | 6 | **P1** | ✅ | Insights @100 runs / sensitivity @200–400 runs report deltas inside MC noise | Risk, Transparency | S |
-| 7 | **P2** | ⬜ | "Retirement age" tornado bar actually perturbs `currentAge`; contribution-amount row missing | Transparency | S |
+| 7 | **P2** | ✅ | "Retirement age" tornado bar actually perturbs `currentAge`; contribution-amount row missing. **Done: perturb the real retirement age** (cascaded via `withRetirementAge`) + restored a Contributions row. | Transparency | S |
 | 8 | **P2** | ✅ | Flat marginal tax, SS tax-free, no 0% LTCG bracket, no bracket-filling. **Done: progressive withdrawal-phase tax** — standard deduction + statutory ordinary brackets, partial SS taxation (provisional income), 0/15/20% LTCG stacked on ordinary income; filing-status aware; brackets track inflation. | Accuracy | M |
 | 9 | **P2** | ✅ | Independent inflation/return sampling; no valuation-aware starting return. **Done: negative return↔inflation correlation** in the sampler (stagflation risk); historical-average optimism surfaced as an assumption + drawer caption. Valuation-aware *level* stays user-driven (P10/P90 inputs). | Accuracy | M |
 | 10 | **P2** | ✅ | Deterministic `maxAge` = no longevity risk distribution. **Done: optional stochastic mortality** — each run draws an age at death from a Gompertz model, so the success rate is an expectation over lifespans, not a verdict against one arbitrary horizon. Opt-in (`longevity: 'stochastic'`); fixed remains the default. | Risk | M |
@@ -238,6 +238,13 @@ The "Retirement age" tornado bar perturbs `currentAge ±2`
 not when the person retires (`contributionEndAge`/`withdrawalStartAge`). Mislabeled. The spec's
 "total contribution amount" row (§3.7) was dropped and replaced by salary. **Fix:** perturb the
 actual retirement age; restore a contribution-amount row.
+
+**✅ Done.** The "Retirement age" perturbation now shifts `person.retirementAge ±2` through
+`withRetirementAge`, which cascades onto each account's `contributionEndAge` (and taxable
+`withdrawalStartAge`) — what "retire later/earlier" actually means — instead of moving `currentAge`.
+A **Contributions** row (each account's per-period amount ±20%; `contributeMax` accounts unaffected)
+is restored alongside the existing salary row. (The tornado isn't surfaced in the v2 UI, so this is
+correctness/transparency for the engine output rather than a visible change.)
 
 ### 8. Tax model is crude
 Flat marginal rate on all traditional withdrawals — no standard deduction or bracket-filling
