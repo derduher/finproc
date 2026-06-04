@@ -47,7 +47,8 @@ Status legend: ✅ done · ◑ partial · ⬜ not started.
 |---|-----|--------|---------|----------|--------|
 | 1 | **P0** | ✅ (IID) | One return draw per run → no sequence-of-returns risk; fake fat right tail. **Done: per-year IID sampling.** Block-bootstrap is the remaining refinement (#1b). | Accuracy, Risk | L |
 | 1b | **P1** | ⬜ | Per-year draws are IID — no autocorrelation/volatility-clustering. Upgrade to block-bootstrap so crashes persist across consecutive years (the schedule shape already supports it). | Accuracy, Risk | M |
-| 2 | **P0** | ◑ | Binary "success rate" hides magnitude + timing of failure and rewards over-saving — engine outputs built (sustainable-spend solver, surplus + shortfall-by-percentile distributions, sample paths); UI reframe pending | Risk, Transparency | M (sim) / L (UX) |
+| 1c | **P1** | ✅ | Flows inflated by a single year's draw raised to `y` (`(1+iᵧ)^y`) instead of the realized cumulative price level `∏(1+iₖ)` — only equal under constant inflation. Introduced spurious year-to-year expense swings + upward bias once per-year sampling landed. **Done: carry a cumulative price level; all present-dollar flows convert by it.** | Accuracy, Risk | S |
+| 2 | **P0** | ✅ | Binary "success rate" hides magnitude + timing of failure and rewards over-saving — engine outputs built (sustainable-spend solver, surplus + shortfall-by-percentile distributions, sample paths); **v2 UI reframe shipped** (sustainable-spend hero, two-sided risk/surplus, demoted success %, solve-for-age/spend/saving) | Risk, Transparency | M (sim) / L (UX) |
 | 3 | **P1** | ✅ | RMD cash is destroyed, not spent/reinvested; RMD block gated behind `netNeed>0` | Accuracy | S |
 | 4 | **P1** | ✅ | Employer match wrongly subtracted from take-home pre-retirement | Accuracy | S |
 | 5 | **P1** | ✅ | Traditional dollars effectively double-taxed (contrib not pre-tax, then grossed-up on exit) | Accuracy | M |
@@ -198,6 +199,25 @@ the "one more year of work: 60%→63%" insight ([`insights.ts:88`](../src/sim/in
 too. **Fix:** raise run counts for any reported delta, and/or gate on a significance threshold
 (e.g. require |delta| > 2× the seed-to-seed std error before showing a card/bar). Common random
 numbers across perturbations (already done — all use `inputs.seed`) help and should stay.
+
+### 1c. Flows used a snapshot inflation rate, not the realized cumulative path
+After the per-year sampling upgrade (#1), `runMonteCarlo` draws an independent inflation rate
+for every year, but the projection still inflated flows with
+`inflate(base, 0, y, inflationᵧ) = base × (1 + inflationᵧ)^y` — **year `y`'s single draw raised to
+`y`** ([`projection.ts:193`](../src/sim/projection.ts) and the SS / one-time lines). This equals the
+realized price level `∏ₖ₌₀…ʸ⁻¹(1+inflationₖ)` only when inflation is constant (the old single-draw
+model, where it was exact). With varying draws it re-bases the whole elapsed period to the latest
+year's number, so:
+- **Spurious volatility** — at `y=30`, a 4% draw gives ×3.24 vs a 2% draw ×1.81; modeled expenses
+  lurch year to year instead of tracking a smooth price level, so "flat real spending" wasn't flat.
+- **Upward bias** — `E[(1+iᵧ)^y]` carries an extra ≈ `e^(y²σ²/2)` over the true cumulative mean
+  (~+3% on expenses by year 30, growing with horizon).
+
+Returns were unaffected (compounded month-by-month on balances); only the inflation of *flows* used
+the shortcut. **Fix:** carry a running `cumInflation` price level through the year loop and convert
+every present-dollar flow (expenses, Social Security, one-time + recurring costs) by it. This also
+makes present-dollar SS hold its purchasing power from *today* rather than only from claim age.
+Tested with a varying-per-year scenario pinning cumulative vs snapshot.
 
 ---
 

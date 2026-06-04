@@ -199,6 +199,37 @@ describe('runSingleProjection — social security', () => {
   })
 })
 
+describe('runSingleProjection — cumulative inflation (varying per-year rates)', () => {
+  it('inflates flows by the realized cumulative price level, not one year\'s rate^y', () => {
+    // Retired Roth holder (net == gross), zero growth, no SS. Each year's expense
+    // withdrawal should track the PRODUCT of prior years' inflation, not the
+    // current year's single draw raised to y.
+    const perYear = [
+      { stockGrowth: 0, inflation: 0.10 },
+      { stockGrowth: 0, inflation: 0.00 },
+      { stockGrowth: 0, inflation: 0.20 },
+    ]
+    const res = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 65, maxAge: 68 },
+        accounts: [{
+          id: 'r', name: 'Roth', type: 'roth', balance: 1_000_000,
+          contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+          contributionEndAge: 65, withdrawalStartAge: 65,
+        }],
+        annualExpenses: 10_000,
+      }),
+      perYear,
+    )
+    const w = res.yearlyResults.map((y) => y.withdrawals)
+    // Price level at year y = product of inflation over the y PRIOR years.
+    expect(w[0]).toBeCloseTo(10_000, 2) // ×1
+    expect(w[1]).toBeCloseTo(11_000, 2) // ×1.10
+    expect(w[2]).toBeCloseTo(11_000, 2) // ×1.10×1.00
+    // The buggy snapshot formula (1+i_y)^y would give 10_000 then 14_400 here.
+  })
+})
+
 describe('runSingleProjection — one-time expenses', () => {
   it('one-time expense at age 50 reduces balance in that year', () => {
     const withExpense = runSingleProjection(
