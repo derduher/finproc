@@ -187,6 +187,16 @@ export const SimulationInputsSchema = z
      */
     spendingPolicy: z.enum(['flat', 'guardrails']).optional(),
 
+    /**
+     * Longevity model.
+     * - 'fixed' (default): every run ends at `person.maxAge` — a single hard death
+     *   date, so the headline depends on an arbitrary horizon input.
+     * - 'stochastic': each run draws its own age at death from a Gompertz mortality
+     *   model ([`sim/mortality.ts`]), so the success rate is an expectation over the
+     *   *distribution* of lifespans. Optional for back-compat with older URLs.
+     */
+    longevity: z.enum(['fixed', 'stochastic']).optional(),
+
     /** PRNG seed for reproducibility */
     seed: z.number().int(),
   })
@@ -279,6 +289,7 @@ export function defaultInputs(): SimulationInputs {
     withdrawalStrategy: WithdrawalStrategy.TaxOptimal,
     withdrawalOrder: undefined,
     spendingPolicy: 'flat',
+    longevity: 'fixed',
     seed: 0x4f2a,
   }
 }

@@ -169,7 +169,7 @@ export function MainScreen() {
                   {/* demoted success + assumptions */}
                   <div style={{ borderTop: '1px solid var(--line)', paddingTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <HoldChip reads={reads} />
-                    <AssumptionBar maxAge={inputs.person.maxAge} onMethodology={() => setDrawer('methodology')} />
+                    <AssumptionBar maxAge={inputs.person.maxAge} longevity={inputs.longevity ?? 'fixed'} onMethodology={() => setDrawer('methodology')} />
                   </div>
                 </>
               )
