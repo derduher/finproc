@@ -45,8 +45,8 @@ Status legend: ✅ done · ◑ partial · ⬜ not started.
 
 | # | Pri | Status | Finding | Goal hit | Effort |
 |---|-----|--------|---------|----------|--------|
-| 1 | **P0** | ✅ (IID) | One return draw per run → no sequence-of-returns risk; fake fat right tail. **Done: per-year IID sampling.** Block-bootstrap is the remaining refinement (#1b). | Accuracy, Risk | L |
-| 1b | **P1** | ⬜ | Per-year draws are IID — no autocorrelation/volatility-clustering. Upgrade to block-bootstrap so crashes persist across consecutive years (the schedule shape already supports it). | Accuracy, Risk | M |
+| 1 | **P0** | ✅ | One return draw per run → no sequence-of-returns risk; fake fat right tail. **Done: per-year sampling**, now with serial correlation (#1b). | Accuracy, Risk | L |
+| 1b | **P1** | ✅ | Per-year draws were IID — no autocorrelation, so crashes didn't persist (IID *understates* sequence risk). **Done: AR(1) serial correlation** on standardized return/inflation shocks — persistence reshapes the *path* while preserving each segment's marginal P10/P90. (Parametric AR(1) rather than historical block-bootstrap, which would discard the user's own return assumptions.) | Accuracy, Risk | M |
 | 1c | **P1** | ✅ | Flows inflated by a single year's draw raised to `y` (`(1+iᵧ)^y`) instead of the realized cumulative price level `∏(1+iₖ)` — only equal under constant inflation. Introduced spurious year-to-year expense swings + upward bias once per-year sampling landed. **Done: carry a cumulative price level; all present-dollar flows convert by it.** | Accuracy, Risk | S |
 | 2 | **P0** | ✅ | Binary "success rate" hides magnitude + timing of failure and rewards over-saving — engine outputs built (sustainable-spend solver, surplus + shortfall-by-percentile distributions, sample paths); **v2 UI reframe shipped** (sustainable-spend hero, two-sided risk/surplus, demoted success %, solve-for-age/spend/saving) | Risk, Transparency | M (sim) / L (UX) |
 | 3 | **P1** | ✅ | RMD cash is destroyed, not spent/reinvested; RMD block gated behind `netNeed>0` | Accuracy | S |
@@ -120,10 +120,19 @@ Impact on the reference scenario (40yo, retire 65, $80k expenses):
 | Median depletion age | 83 | 92 |
 
 The band is now narrow during accumulation and widens through retirement — the correct shape.
-**Caveat:** draws are IID, so there's no autocorrelation/volatility-clustering yet; IID actually
-*understates* sequence risk vs. real markets (crashes don't persist across years). Block-bootstrap
-is the follow-up (#1b) — the per-year schedule shape was built to accept it without touching the
-projection.
+
+**✅ Follow-up done (#1b — serial correlation).** The per-year draws are no longer IID.
+`buildRateSchedule` ([`montecarlo.ts`](../src/sim/montecarlo.ts)) carries a standardized AR(1)
+state for each stream across the horizon — `zₜ = ρ·zₜ₋₁ + √(1−ρ²)·εₜ`, converted to a rate by the
+active segment's `mean + σ·z`. Because `zₜ` stays marginally `N(0,1)`, each year's distribution
+(the user's P10/P90 spread) is preserved exactly; only the *path* gains correlation. Defaults:
+`stock = 0.15` (annual equity returns are near a random walk, but bear/bull runs persist and IID
+let a crash year stand alone), `inflation = 0.65` (realized inflation is strongly persistent — the
+1970s lasted a decade). `ρ = 0` reproduces the prior IID path bit-for-bit. This is a **parametric**
+AR(1), deliberately chosen over a historical block-bootstrap, which would override the user-supplied
+return/inflation assumptions that drive the whole model. As a side benefit it partly addresses the
+inflation-persistence half of #9. Validated by a long-horizon test pinning the realized lag-1
+autocorrelation and the preserved marginal mean/σ.
 
 ---
 
