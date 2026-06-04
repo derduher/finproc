@@ -25,18 +25,24 @@ export interface AssumptionItem {
   hint?: string
 }
 
-/** Default assumption set; `maxAge` flows into the longevity chip. */
+/** Default assumption set; `maxAge` / `longevity` flow into the longevity chip. */
 export function AssumptionBar({
   maxAge,
+  longevity = 'fixed',
   onMethodology,
 }: {
   maxAge: number
+  longevity?: 'fixed' | 'stochastic'
   onMethodology?: () => void
 }) {
+  const longevityChip: AssumptionItem =
+    longevity === 'stochastic'
+      ? { bias: 'two', label: 'Lifespan varies', hint: 'longevity risk modeled' }
+      : { bias: 'two', label: `Plan ends age ${maxAge}`, hint: 'ignores longevity' }
   const items: AssumptionItem[] = [
     { bias: 'opt', label: 'Historical returns', hint: "optimistic at today's valuations" },
-    { bias: 'cons', label: 'Flat tax rate', hint: 'overstates retirement tax' },
-    { bias: 'two', label: `Plan ends age ${maxAge}`, hint: 'ignores longevity' },
+    { bias: 'two', label: 'Progressive tax', hint: 'brackets + standard deduction' },
+    longevityChip,
     { bias: 'two', label: 'Returns vary year to year', hint: 'sequence risk modeled' },
   ]
   return (

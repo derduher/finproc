@@ -56,7 +56,7 @@ Status legend: ✅ done · ◑ partial · ⬜ not started.
 | 7 | **P2** | ⬜ | "Retirement age" tornado bar actually perturbs `currentAge`; contribution-amount row missing | Transparency | S |
 | 8 | **P2** | ✅ | Flat marginal tax, SS tax-free, no 0% LTCG bracket, no bracket-filling. **Done: progressive withdrawal-phase tax** — standard deduction + statutory ordinary brackets, partial SS taxation (provisional income), 0/15/20% LTCG stacked on ordinary income; filing-status aware; brackets track inflation. | Accuracy | M |
 | 9 | **P2** | ⬜ | Independent inflation/return sampling; no valuation-aware starting return | Accuracy | M |
-| 10 | **P2** | ⬜ | Deterministic `maxAge` = no longevity risk distribution | Risk | M |
+| 10 | **P2** | ✅ | Deterministic `maxAge` = no longevity risk distribution. **Done: optional stochastic mortality** — each run draws an age at death from a Gompertz model, so the success rate is an expectation over lifespans, not a verdict against one arbitrary horizon. Opt-in (`longevity: 'stochastic'`); fixed remains the default. | Risk | M |
 | 11 | **P2** | ✅ | Flat-real lifetime spending; no dynamic/guardrail withdrawals | Accuracy, Risk | M |
 | 12 | **P3** | ⬜ | Frozen nominal IRS limits, no catch-up; mid-month convention not implemented | Accuracy | S |
 
@@ -288,6 +288,21 @@ also the known fixed-horizon artifact: the final simulated year is treated as 1 
 survivors have years of remaining life expectancy. **Fix (phased):** near-term, present horizon
 as an *assumption with a sensitivity* ("plan to 95 vs 100"); longer-term, optional stochastic
 mortality.
+
+**✅ Done — optional stochastic mortality.** New [`sim/mortality.ts`](../src/sim/mortality.ts) draws
+an age at death from a **Gompertz** law (Milevsky parameterization, `m=88`, `b=10` — qx ≈ 1% at 65,
+≈ 7% at 85, ≈ 18% at 95; median age at death from 65 ≈ 86). When `inputs.longevity === 'stochastic'`,
+`runMonteCarlo` draws a death age per run, shortens that run's horizon to it, and a run "succeeds" if
+the portfolio lasts until death — so the headline becomes an **expectation over the distribution of
+lifespans** rather than a verdict against one arbitrary `maxAge`. Per-year bands and cashflow medians
+aggregate over the *surviving cohort*, so they taper past the old hard horizon (some runs live toward
+120) and `aggregateCashflows` now tolerates variable-length runs; end-balance percentiles read as the
+bequest/legacy distribution. It's **opt-in** (default `fixed` preserves the deterministic path and
+every existing test bit-for-bit); a toggle lives in the Advanced drawer and the assumption chip flips
+from "ignores longevity" to "longevity risk modeled". A regression test pins the core property: under
+stochastic longevity the result is invariant to `person.maxAge`. The Gompertz model is parametric
+(not a claimed actuarial table) — transparent and compact; a real period life table is a possible
+future refinement.
 
 ### 11. Flat-real spending; no guardrails
 The retiree spends the same real amount whether the portfolio booms or crashes, which both

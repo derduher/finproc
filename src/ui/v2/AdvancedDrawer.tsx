@@ -369,6 +369,24 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
             <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>RMDs are honored from age 73 regardless of order.</div>
           </Acc>
 
+          {/* Longevity */}
+          <Acc title="Longevity" value={(inputs.longevity ?? 'fixed') === 'stochastic' ? 'Modeled' : `Fixed to ${person.maxAge}`}>
+            <select
+              aria-label="Longevity model"
+              value={inputs.longevity ?? 'fixed'}
+              onChange={(e) => patchInputs({ longevity: e.target.value as 'fixed' | 'stochastic' })}
+              style={pill}
+            >
+              <option value="fixed">Plan to a fixed age ({person.maxAge})</option>
+              <option value="stochastic">Model lifespan (actuarial)</option>
+            </select>
+            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>
+              A fixed end age is arbitrary and drives the headline. Modeling lifespan draws an age at
+              death per run from a Gompertz mortality curve, so the success rate reflects the spread of
+              how long you might live rather than one guess.
+            </div>
+          </Acc>
+
           {/* Taxes */}
           <Acc title="Taxes" value={`Flat ${Math.round(person.marginalTaxRate * 100)}% · LTCG ${Math.round(person.ltcgRate * 100)}%`}>
             <div style={{ display: 'flex', gap: 16 }}>
@@ -381,7 +399,7 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                 <input type="number" aria-label="LTCG rate" value={Math.round(person.ltcgRate * 100)} onChange={(e) => patchPerson({ ltcgRate: Number(e.target.value) / 100 })} style={{ ...pill, width: 72 }} />
               </label>
             </div>
-            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>A flat rate tends to overstate retirement tax — it ignores the standard deduction and bracket-filling.</div>
+            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>Retirement withdrawals use progressive brackets + the standard deduction; this rate sets your working-years take-home.</div>
           </Acc>
 
           {/* Plan-to age */}

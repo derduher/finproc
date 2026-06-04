@@ -1,6 +1,7 @@
 import { runSingleProjection } from './projection'
 import type { SampledRates, SpendAdjustment } from './projection'
 import { aggregateCashflows } from './cashflow'
+import { sampleAgeAtDeath, MORTALITY_MAX_AGE } from './mortality'
 import { mulberry32, boxMullerNormal, p10p90ToMean, p10p90ToSigma, percentile } from '../math'
 import type { SimulationInputs } from '../schema'
 
@@ -109,14 +110,22 @@ export function runMonteCarlo(
   onProgress?.({ stage: 'sample', done: 1, total: 1 })
 
   const { person } = inputs
-  const years = person.maxAge - person.currentAge
+  // Longevity: 'fixed' ends every run at maxAge; 'stochastic' draws a per-run age
+  // at death, so the horizon (and the success criterion) varies run to run. The
+  // band/cashflow arrays are sized to the widest possible horizon and trimmed to
+  // the longest run actually realized.
+  const stochasticLongevity = (inputs.longevity ?? 'fixed') === 'stochastic'
+  const maxHorizonAge = stochasticLongevity ? MORTALITY_MAX_AGE : person.maxAge
+  const years = maxHorizonAge - person.currentAge
 
   // Precompute the return/inflation distribution for each rate segment, tagged
   // with the age it takes effect. Each simulated year draws from whichever
   // segment is active that year (see `activeSegment`).
   const segments = buildSegments(inputs)
 
-  // Accumulators: for each year, collect all runs' total balances
+  // Accumulators: for each year, collect all runs' total balances. Under
+  // stochastic longevity a run contributes only up to its age at death, so later
+  // years hold fewer runs (the surviving cohort).
   const balancesByYear: number[][] = Array.from({ length: years }, () => [])
   const endBalances: number[] = []
   let successCount = 0
@@ -133,12 +142,23 @@ export function runMonteCarlo(
     if (onProgress && (run % projectInterval === 0 || run === runCount - 1)) {
       onProgress({ stage: 'project', done: run, total: runCount })
     }
+    // Stochastic longevity: draw this run's age at death and shorten the horizon
+    // to it. A run "succeeds" if the portfolio lasts until death — so success is an
+    // expectation over lifespans, not a verdict against one arbitrary maxAge.
+    let runInputs = inputs
+    let runYears = years
+    if (stochasticLongevity) {
+      const deathAge = sampleAgeAtDeath(person.currentAge, rng)
+      runYears = deathAge - person.currentAge
+      runInputs = { ...inputs, person: { ...person, maxAge: deathAge } }
+    }
+
     // Build a per-year rate schedule with year-to-year serial correlation
     // (`buildRateSchedule`). Per-year draws restore sequence-of-returns risk; the
     // AR(1) persistence layer makes a crash year tend to be followed by another,
     // and keeps inflation regimes sticky — IID alone *understates* sequence risk.
-    const yearlyRates = buildRateSchedule(segments, person.currentAge, years, rng)
-    const result = runSingleProjection(inputs, yearlyRates)
+    const yearlyRates = buildRateSchedule(segments, person.currentAge, runYears, rng)
+    const result = runSingleProjection(runInputs, yearlyRates)
 
     if (result.succeeded) {
       successCount++
@@ -154,6 +174,13 @@ export function runMonteCarlo(
     }
     perRunYears.push(result.yearlyResults)
     if (run < sampleSize) sampleAdjustments.push(result.spendAdjustments)
+  }
+
+  // Trim trailing years no run ever reached (under stochastic longevity the cohort
+  // dies off before MORTALITY_MAX_AGE). Survival is monotone, so only the tail can
+  // be empty — interior years always hold at least the runs that outlived them.
+  while (balancesByYear.length > 0 && balancesByYear[balancesByYear.length - 1].length === 0) {
+    balancesByYear.pop()
   }
 
   // Build yearly percentile bands + cashflow medians

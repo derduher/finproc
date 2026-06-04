@@ -40,8 +40,9 @@ function stableJson(value: unknown): string {
  * v3: cumulative-inflation fix (flows now track the realized price level).
  * v4: AR(1) serial correlation in return/inflation sampling (paths, not marginals).
  * v5: progressive withdrawal-phase tax (brackets, std deduction, partial SS, LTCG 0%).
+ * v6: optional stochastic longevity (per-run age at death); `longevity` field added.
  */
-const CACHE_VERSION = 5
+const CACHE_VERSION = 6
 
 /** Derive a deterministic cache key from simulation inputs. */
 export function getCacheKey(inputs: SimulationInputs): string {

@@ -249,6 +249,59 @@ describe('runMonteCarlo — guardrails (#11)', () => {
   })
 })
 
+describe('runMonteCarlo — stochastic longevity (#10)', () => {
+  const retiree = (over: Partial<SimulationInputs> = {}) =>
+    inputs({
+      person: { ...defaultInputs().person, currentAge: 65, maxAge: 95 },
+      accounts: [{
+        id: 'trad', name: '401k', type: 'traditional', balance: 600_000,
+        contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+        contributionEndAge: 64, withdrawalStartAge: 60,
+      }],
+      annualExpenses: 45_000,
+      socialSecurity: undefined,
+      longevity: 'stochastic',
+      ...over,
+    })
+
+  it('produces valid, monotone bands and is deterministic for a seed', () => {
+    const r1 = runMonteCarlo(retiree(), 300, 42)
+    const r2 = runMonteCarlo(retiree(), 300, 42)
+    expect(r1.successRate).toBe(r2.successRate)
+    expect(r1.yearlyResults.length).toBeGreaterThan(0)
+    for (const yr of r1.yearlyResults) {
+      expect(yr.p10).toBeLessThanOrEqual(yr.p50)
+      expect(yr.p50).toBeLessThanOrEqual(yr.p90)
+    }
+  })
+
+  it('horizon no longer depends on the arbitrary maxAge input', () => {
+    // The whole point of #10: under stochastic longevity, `person.maxAge` is unused
+    // — each run draws its own age at death — so changing it leaves the headline
+    // (and the whole result) identical. Under the fixed model it would not.
+    const a = runMonteCarlo(retiree({ person: { ...defaultInputs().person, currentAge: 65, maxAge: 95 } }), 300, 7)
+    const b = runMonteCarlo(retiree({ person: { ...defaultInputs().person, currentAge: 65, maxAge: 115 } }), 300, 7)
+    expect(a.successRate).toBe(b.successRate)
+    expect(a.yearlyResults.length).toBe(b.yearlyResults.length)
+  })
+
+  it('the surviving cohort extends past the fixed maxAge, then tapers off', () => {
+    const r = runMonteCarlo(retiree(), 1000, 42)
+    const lastAge = r.yearlyResults.at(-1)!.age
+    // Some runs live well past the old hard horizon of 95 (up toward 120).
+    expect(lastAge).toBeGreaterThan(100)
+    expect(lastAge).toBeLessThanOrEqual(120)
+  })
+
+  it('fixed-horizon success is sensitive to maxAge (the problem #10 removes)', () => {
+    // A longer fixed horizon gives the portfolio more years to deplete, so success
+    // can only fall or hold — never rise. Demonstrates the arbitrary-input drift.
+    const short = runMonteCarlo(retiree({ longevity: 'fixed', person: { ...defaultInputs().person, currentAge: 65, maxAge: 95 } }), 400, 7)
+    const long = runMonteCarlo(retiree({ longevity: 'fixed', person: { ...defaultInputs().person, currentAge: 65, maxAge: 115 } }), 400, 7)
+    expect(long.successRate).toBeLessThanOrEqual(short.successRate)
+  })
+})
+
 describe('runMonteCarlo — breakpoint segment sampling', () => {
   it('breakpoint at age 70 produces two distinct rate segments per run', () => {
     const inp = inputs({
