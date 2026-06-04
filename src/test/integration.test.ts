@@ -120,6 +120,7 @@ describe('cache — key determinism', () => {
         salaryGrowthRate: a.person.salaryGrowthRate,
         marginalTaxRate: a.person.marginalTaxRate,
         ltcgRate: a.person.ltcgRate,
+        filingStatus: a.person.filingStatus,
       },
     }
     expect(getCacheKey(a)).toBe(getCacheKey(b))

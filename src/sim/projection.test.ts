@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { runSingleProjection } from './projection'
+import { ordinaryTax, grossUpOrdinary } from './tax'
 import { defaultInputs, WithdrawalStrategy } from '../schema'
 import type { SimulationInputs } from '../schema'
 
@@ -66,15 +67,17 @@ describe('runSingleProjection — zero growth, no withdrawals', () => {
   })
 })
 
-describe('runSingleProjection — traditional withdrawal gross-up', () => {
-  it('25% marginal rate, $40K net need → $53,333 gross withdrawn', () => {
+describe('runSingleProjection — traditional withdrawal gross-up (progressive #8)', () => {
+  it('grosses up a $40K net need through the bracket schedule, not a flat marginal rate', () => {
     const netNeed = 40000
-    const marginalRate = 0.25
-    const expectedGross = netNeed / (1 - marginalRate) // 53,333.33
+    // Progressive: $15k standard deduction shelters the first dollars, then the
+    // 10%/12% brackets fill — far cheaper than a flat marginal rate. No SS, no
+    // other income, zero inflation → priceLevel 1, single filer.
+    const expectedGross = grossUpOrdinary(netNeed, 0, 'single')
 
     const result = runSingleProjection(
       inputs({
-        person: { ...defaultInputs().person, currentAge: 65, maxAge: 66, marginalTaxRate: marginalRate },
+        person: { ...defaultInputs().person, currentAge: 65, maxAge: 66, marginalTaxRate: 0.25 },
         accounts: [{
           id: 'a', name: '401k', type: 'traditional',
           balance: 500000,
@@ -93,6 +96,10 @@ describe('runSingleProjection — traditional withdrawal gross-up', () => {
     // yearlyResults[0] is end of first year (age 66)
     const endBalance = result.yearlyResults[0]!.totalBalance
     expect(endBalance).toBeCloseTo(500000 - expectedGross, 0)
+    // The progressive gross-up is materially smaller than the old flat 25% one
+    // (which would have withdrawn $53,333) — the core #8 correction.
+    expect(expectedGross).toBeLessThan(45000)
+    expect(endBalance).toBeGreaterThan(500000 - 45000)
   })
 })
 
@@ -543,7 +550,9 @@ describe('runSingleProjection — RMDs (bug #3: cash must not evaporate)', () =>
     )
     const divisor = 26.5 // IRS Uniform Lifetime Table, age 73
     const rmd = 1_000_000 / divisor
-    const tax = rmd * marginalTaxRate
+    // RMD proceeds are ordinary income, taxed progressively (no other income, no
+    // SS, zero inflation → single filer at priceLevel 1) — not at a flat rate.
+    const tax = ordinaryTax(rmd, 'single')
     // The RMD is forced out of the traditional account but the net proceeds are
     // reinvested (not destroyed): the portfolio shrinks only by the tax paid.
     const expectedTotal = 1_000_000 - tax
@@ -585,7 +594,7 @@ describe('runSingleProjection — RMDs (bug #3: cash must not evaporate)', () =>
       ZERO_RATES,
     )
     const rmd = 1_000_000 / 26.5
-    const net = rmd * (1 - marginalTaxRate)
+    const net = rmd - ordinaryTax(rmd, 'single') // progressive ordinary tax on the RMD
     const yr = result.yearlyResults.at(-1)!
     // Net proceeds land in the user's existing brokerage, not a synthetic account.
     expect(yr.accountBalances['brok']).toBeCloseTo(100_000 + net, -1)
