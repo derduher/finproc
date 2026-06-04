@@ -92,6 +92,22 @@ describe('SimAccount — contribute max (IRS limit)', () => {
     expect(acc.getBalance()).toBeCloseTo(7500 / 12, 2)
   })
 
+  it('contributeMax grows with the COLA factor and adds the 50+ catch-up (#12)', () => {
+    const def = makeAccount({
+      type: 'traditional', accountSubtype: '401k', contributeMax: true,
+      contributionAmount: 50, contributionType: 'flat', contributionFrequency: 'monthly',
+      contributionEndAge: 70,
+    })
+    // Age 55 (catch-up), price level 1.2 → (24,500 + 8,000) × 1.2 / 12.
+    const a = new SimAccount(def, 0)
+    a.contribute(55, 100000, 1.2)
+    expect(a.getBalance()).toBeCloseTo((24500 + 8000) * 1.2 / 12, 2)
+    // Same account at 40 with no inflation → just the base limit / 12 (no catch-up).
+    const b = new SimAccount(def, 0)
+    b.contribute(40, 100000, 1)
+    expect(b.getBalance()).toBeCloseTo(24500 / 12, 2)
+  })
+
   it('with contributeMax=true but subtype undefined → falls back to flat contribution', () => {
     const acc = new SimAccount(
       makeAccount({

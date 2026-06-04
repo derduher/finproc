@@ -58,7 +58,7 @@ Status legend: ✅ done · ◑ partial · ⬜ not started.
 | 9 | **P2** | ✅ | Independent inflation/return sampling; no valuation-aware starting return. **Done: negative return↔inflation correlation** in the sampler (stagflation risk); historical-average optimism surfaced as an assumption + drawer caption. Valuation-aware *level* stays user-driven (P10/P90 inputs). | Accuracy | M |
 | 10 | **P2** | ✅ | Deterministic `maxAge` = no longevity risk distribution. **Done: optional stochastic mortality** — each run draws an age at death from a Gompertz model, so the success rate is an expectation over lifespans, not a verdict against one arbitrary horizon. Opt-in (`longevity: 'stochastic'`); fixed remains the default. | Risk | M |
 | 11 | **P2** | ✅ | Flat-real lifetime spending; no dynamic/guardrail withdrawals | Accuracy, Risk | M |
-| 12 | **P3** | ⬜ | Frozen nominal IRS limits, no catch-up; mid-month convention not implemented | Accuracy | S |
+| 12 | **P3** | ✅ | Frozen nominal IRS limits, no catch-up; mid-month convention not implemented. **Done: `contributeMax` limits grow with realized inflation (COLA) + 50+ catch-up**; mid-month comment reconciled to the actual end-of-month behavior. | Accuracy | S |
 
 Effort: S ≈ <½ day, M ≈ 1–3 days, L ≈ multi-day with test rework.
 
@@ -335,11 +335,17 @@ strategy alongside the existing static one.
 
 ### 12. Misc
 - IRS limits frozen in nominal 2026 dollars with no COLA growth and no 50+ catch-up
-  ([`irsLimits.ts:11`](../src/sim/irsLimits.ts)) — `contributeMax` contributions shrink in real
+  ([`irsLimits.ts`](../src/sim/irsLimits.ts)) — `contributeMax` contributions shrink in real
   terms over a 55-yr horizon. **Fix:** grow limits with assumed inflation; add catch-up.
+  **✅ Done.** `irsContributionLimit(subtype, age, colaFactor)` now adds the standard 50+
+  catch-up (401k +$8k, IRA +$1.1k) and multiplies by the realized cumulative price level, which
+  `SimAccount` threads through from the projection (the same `priceLevel` that indexes expenses,
+  SS, and tax brackets) — so a `contributeMax` saver keeps contributing the same *real* amount
+  across the horizon. (SECURE 2.0's age-60–63 "super catch-up" is not modeled.)
 - "Mid-month contribution" convention is documented but not implemented — growth is applied
-  *before* the contribution each month ([`account.ts:78-91`](../src/sim/account.ts)), i.e.
-  end-of-month behavior. Minor; reconcile code with spec §3.1 (or update the spec).
+  *before* the contribution each month ([`account.ts`](../src/sim/account.ts)), i.e. end-of-month
+  behavior. **✅ Reconciled** by correcting the code comment to describe the actual end-of-month
+  timing (no behavior change — the half-month difference is negligible over the horizon).
 
 ---
 

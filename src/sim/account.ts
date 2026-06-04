@@ -74,20 +74,23 @@ export class SimAccount {
    *
    * @param currentAge     Current age (whole-year basis for phase checks)
    * @param annualSalary   Current year salary (used for percent contributions)
+   * @param colaFactor     Cumulative price level (today = 1) used to grow IRS
+   *                       `contributeMax` limits with inflation; 1 = no growth.
    */
-  contribute(currentAge: number, annualSalary: number): void {
+  contribute(currentAge: number, annualSalary: number, colaFactor: number = 1): void {
     // contributionEndAge is the age at which contributions STOP, so the year the
     // person turns that age earns no contribution (exclusive). For a plan that
     // retires at 62 with contributionEndAge = 62, the last contributing year is 61.
     if (currentAge >= this.def.contributionEndAge) return
 
-    const monthlyContrib = this.monthlyContributionAmount(annualSalary)
-    const monthlyMatch = this.monthlyMatchAmount(annualSalary)
+    const monthlyContrib = this.monthlyContributionAmount(annualSalary, currentAge, colaFactor)
+    const monthlyMatch = this.monthlyMatchAmount(annualSalary, currentAge, colaFactor)
     const total = monthlyContrib + monthlyMatch
 
-    // Mid-month convention: contribution credited at month-mid gets ~0 additional
-    // growth this month (the applyMonthlyGrowth was already applied to the prior
-    // balance). We simply add to the current balance.
+    // End-of-month convention: the caller already applied this month's growth to
+    // the prior balance, and the contribution is added afterward, so it earns no
+    // growth in the month it lands. (Documented as mid-month in the spec; the code
+    // is end-of-month — the difference is negligible over the horizon.)
     this.balance += total
 
     // Cost basis: contributions are after-tax dollars (taxable) or tracked 1:1
@@ -158,9 +161,11 @@ export class SimAccount {
    * Mirrors the per-month logic in `contribute()`; used by `runSingleProjection`
    * to subtract pre-retirement contributions from disposable income.
    */
-  annualContribution(currentAge: number, annualSalary: number): number {
+  annualContribution(currentAge: number, annualSalary: number, colaFactor: number = 1): number {
     if (currentAge >= this.def.contributionEndAge) return 0
-    const monthly = this.monthlyContributionAmount(annualSalary) + this.monthlyMatchAmount(annualSalary)
+    const monthly =
+      this.monthlyContributionAmount(annualSalary, currentAge, colaFactor) +
+      this.monthlyMatchAmount(annualSalary, currentAge, colaFactor)
     return monthly * 12
   }
 
@@ -170,19 +175,19 @@ export class SimAccount {
    * take-home pay: the employer match is never paid from the employee's salary,
    * and traditional employee contributions are pre-tax.
    */
-  annualEmployeeContribution(currentAge: number, annualSalary: number): number {
+  annualEmployeeContribution(currentAge: number, annualSalary: number, colaFactor: number = 1): number {
     if (currentAge >= this.def.contributionEndAge) return 0
-    return this.monthlyContributionAmount(annualSalary) * 12
+    return this.monthlyContributionAmount(annualSalary, currentAge, colaFactor) * 12
   }
 
-  private monthlyContributionAmount(annualSalary: number): number {
+  private monthlyContributionAmount(annualSalary: number, currentAge: number = 0, colaFactor: number = 1): number {
     const { contributionAmount, contributionType, contributionFrequency, contributeMax, accountSubtype } = this.def
 
-    // contributeMax: derive from IRS limit for the subtype. Only meaningful
-    // when accountSubtype is '401k' or 'ira'. Falls through to the user-
-    // entered amount if no subtype is set.
+    // contributeMax: derive from IRS limit for the subtype, grown by the catch-up
+    // (50+) and COLA (inflation). Only meaningful when accountSubtype is '401k' or
+    // 'ira'; falls through to the user-entered amount if no subtype is set.
     if (contributeMax) {
-      const annualLimit = irsContributionLimit(accountSubtype)
+      const annualLimit = irsContributionLimit(accountSubtype, currentAge, colaFactor)
       if (annualLimit > 0) return annualLimit / 12
     }
 
@@ -196,13 +201,13 @@ export class SimAccount {
     return contributionAmount * multiplier
   }
 
-  private monthlyMatchAmount(annualSalary: number): number {
+  private monthlyMatchAmount(annualSalary: number, currentAge: number = 0, colaFactor: number = 1): number {
     const match = this.def.employerMatch
     if (!match) return 0
 
     if (match.type === 'percent') {
       // "X% match up to Y% of salary"
-      const employeeMonthly = this.monthlyContributionAmount(annualSalary)
+      const employeeMonthly = this.monthlyContributionAmount(annualSalary, currentAge, colaFactor)
       const matchCap = (match.upToPercent / 100) * annualSalary / 12
       const matchable = Math.min(employeeMonthly, matchCap)
       return matchable * (match.matchPercent / 100)

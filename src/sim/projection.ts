@@ -217,13 +217,13 @@ export function runSingleProjection(
     for (let m = 0; m < 12; m++) {
       for (const acc of simAccounts) {
         acc.applyMonthlyGrowth(monthlyGrowthRate)
-        acc.contribute(yearStartAge, annualSalary)
+        acc.contribute(yearStartAge, annualSalary, priceLevel)
       }
     }
 
     let contributionsThisYear = depleted
       ? 0
-      : simAccounts.reduce((s, a) => s + a.annualContribution(yearStartAge, annualSalary), 0)
+      : simAccounts.reduce((s, a) => s + a.annualContribution(yearStartAge, annualSalary, priceLevel), 0)
     let socialSecurityThisYear = 0
     let withdrawalsThisYear = 0
 
@@ -281,7 +281,7 @@ export function runSingleProjection(
         let preTaxContrib = 0 // traditional employee contributions
         let afterTaxContrib = 0 // roth + taxable employee contributions
         for (const acc of simAccounts) {
-          const employee = acc.annualEmployeeContribution(yearStartAge, annualSalary)
+          const employee = acc.annualEmployeeContribution(yearStartAge, annualSalary, priceLevel)
           if (acc.type === 'traditional') preTaxContrib += employee
           else afterTaxContrib += employee
         }
