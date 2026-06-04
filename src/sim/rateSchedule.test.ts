@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildRateSchedule, DEFAULT_PERSISTENCE } from './montecarlo'
+import { buildRateSchedule, DEFAULT_PERSISTENCE, DEFAULT_RATE_CORRELATION } from './montecarlo'
 import type { RateSegment } from './montecarlo'
 import { mulberry32, boxMullerNormal } from '../math'
 
@@ -33,6 +33,23 @@ function lag1Autocorr(xs: number[]): number {
   return num / den
 }
 
+/** Pearson correlation between two equal-length series. */
+function pearson(xs: number[], ys: number[]): number {
+  const mx = mean(xs)
+  const my = mean(ys)
+  let num = 0
+  let dx = 0
+  let dy = 0
+  for (let i = 0; i < xs.length; i++) {
+    const a = xs[i] - mx
+    const b = ys[i] - my
+    num += a * b
+    dx += a * a
+    dy += b * b
+  }
+  return num / Math.sqrt(dx * dy)
+}
+
 describe('buildRateSchedule', () => {
   it('returns one finite rate pair per year', () => {
     const sched = buildRateSchedule([SEG], 40, 30, mulberry32(1))
@@ -49,12 +66,12 @@ describe('buildRateSchedule', () => {
     expect(a).toEqual(b)
   })
 
-  it('with zero persistence reproduces the plain per-year IID draws exactly', () => {
+  it('with zero persistence and zero correlation reproduces the plain per-year IID draws exactly', () => {
     const years = 40
     const sched = buildRateSchedule([SEG], 40, years, mulberry32(42), {
       stock: 0,
       inflation: 0,
-    })
+    }, 0)
     // Replicate the old per-year draw order: stock shock then inflation shock.
     const rng = mulberry32(42)
     for (let y = 0; y < years; y++) {
@@ -112,5 +129,32 @@ describe('buildRateSchedule', () => {
     const before = std(sched.slice(0, 20).map((r) => r.stockGrowth))
     const after = std(sched.slice(40, 80).map((r) => r.stockGrowth))
     expect(after).toBeGreaterThan(before * 2)
+  })
+
+  it('couples returns and inflation negatively by default (#9)', () => {
+    // High inflation historically depresses nominal equity returns (the 1970s);
+    // the default correlation makes a high-inflation year tend to be a low-return
+    // year. Persistence attenuates but does not flip the sign.
+    const sched = buildRateSchedule([SEG], 40, 8000, mulberry32(2024))
+    const corr = pearson(sched.map((r) => r.stockGrowth), sched.map((r) => r.inflation))
+    expect(corr).toBeLessThan(-0.12)
+    expect(corr).toBeGreaterThan(-0.5)
+  })
+
+  it('correlation 0 leaves returns and inflation ~independent', () => {
+    const sched = buildRateSchedule([SEG], 40, 8000, mulberry32(2024), DEFAULT_PERSISTENCE, 0)
+    const corr = pearson(sched.map((r) => r.stockGrowth), sched.map((r) => r.inflation))
+    expect(Math.abs(corr)).toBeLessThan(0.05)
+  })
+
+  it('correlation preserves each stream marginal (mean & sigma)', () => {
+    const sched = buildRateSchedule([SEG], 40, 8000, mulberry32(55))
+    expect(mean(sched.map((r) => r.inflation))).toBeCloseTo(SEG.inflationMean, 2)
+    expect(std(sched.map((r) => r.inflation))).toBeCloseTo(SEG.inflationSigma, 2)
+    expect(mean(sched.map((r) => r.stockGrowth))).toBeCloseTo(SEG.growthMean, 2)
+  })
+
+  it('default correlation is negative', () => {
+    expect(DEFAULT_RATE_CORRELATION).toBeLessThan(0)
   })
 })
