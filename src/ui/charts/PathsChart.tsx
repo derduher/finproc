@@ -108,7 +108,12 @@ export function PathsChart({
   const cw = width - pad.l - pad.r
   const ch = height - pad.t - pad.b
 
-  const n = samplePaths[0]?.balances.length ?? 0
+  // Longest series wins. Under stochastic longevity each sample path ends at its
+  // own run's age at death, so paths (and the median) have *different* lengths —
+  // sizing off `samplePaths[0]` alone would truncate the whole chart to whatever
+  // age the first run happened to die at. The median spans the full surviving-
+  // cohort horizon; some sample paths are shorter and simply end early.
+  const n = samplePaths.reduce((m, p) => Math.max(m, p.balances.length), median.length)
   // Nothing to draw yet (e.g. a transient empty result) — render an empty frame
   // rather than feeding NaN coordinates into the SVG.
   if (n === 0 || samplePaths.length === 0) {
@@ -144,7 +149,10 @@ export function PathsChart({
     1,
   )
 
-  const span = Math.max(1, maxAge - currentAge)
+  // Right edge = the furthest plotted age. Usually `maxAge`, but under stochastic
+  // longevity the cohort outlives it, so extend to the longest series.
+  const lastAge = currentAge + n
+  const span = Math.max(1, maxAge - currentAge, n)
   const x = (age: number) => pad.l + ((age - currentAge) / span) * cw
   const y = (v: number) => pad.t + ch - (Math.min(v, cap) / cap) * ch
   const linePath = (arr: number[]) =>
@@ -175,9 +183,9 @@ export function PathsChart({
   const depleteCount = samplePaths.filter((p) => p.depleteAge !== undefined).length
   const yTicks = [0, cap * 0.5, cap]
   const badPath = samplePaths[badIdx]
-  const ageTicks = [currentAge, retireAge, ssAge, maxAge].filter(
-    (a): a is number => a != null,
-  )
+  const ageTicks = [...new Set(
+    [currentAge, retireAge, ssAge, maxAge, lastAge].filter((a): a is number => a != null),
+  )]
 
   // Map a pointer position over the plot rect to the nearest year-column (#4).
   // The overlay rect spans exactly the plot area, so the fraction is scale-correct
