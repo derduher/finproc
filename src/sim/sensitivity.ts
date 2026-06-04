@@ -7,6 +7,7 @@
  * Returns entries sorted by descending absolute impact (largest first).
  */
 import { runMonteCarlo } from './montecarlo'
+import { withRetirementAge } from './retirementAge'
 import type { SimulationInputs } from '../schema'
 import type { SensitivityResult } from '../schema'
 
@@ -72,15 +73,28 @@ const PERTURBATIONS: Perturbation[] = [
     }),
   },
   {
+    // Perturb the *actual* retirement age — cascading onto each account's
+    // contributionEndAge (and taxable withdrawalStartAge) via `withRetirementAge`,
+    // not the person's current age / horizon length (the prior mislabeling).
     label: 'Retirement age',
     sub: '±2 years',
+    applyLo: (inp) =>
+      withRetirementAge(inp, Math.max(inp.person.currentAge, inp.person.retirementAge - 2)),
+    applyHi: (inp) =>
+      withRetirementAge(inp, Math.min(inp.person.maxAge - 1, inp.person.retirementAge + 2)),
+  },
+  {
+    // Total contribution amount (spec §3.7) — scales each account's per-period
+    // contribution; `contributeMax` accounts ignore it and are unaffected.
+    label: 'Contributions',
+    sub: '±20%',
     applyLo: (inp) => ({
       ...inp,
-      person: { ...inp.person, currentAge: Math.max(18, inp.person.currentAge - 2) },
+      accounts: inp.accounts.map((a) => ({ ...a, contributionAmount: a.contributionAmount * (1 - DELTA) })),
     }),
     applyHi: (inp) => ({
       ...inp,
-      person: { ...inp.person, currentAge: Math.min(inp.person.maxAge - 1, inp.person.currentAge + 2) },
+      accounts: inp.accounts.map((a) => ({ ...a, contributionAmount: a.contributionAmount * (1 + DELTA) })),
     }),
   },
   {

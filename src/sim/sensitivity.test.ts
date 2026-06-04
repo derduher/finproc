@@ -52,6 +52,13 @@ describe('runSensitivity — OAT ±20%', () => {
     expect(expRow!.hiDelta).toBeLessThanOrEqual(0)
   })
 
+  it('includes a retirement-age row and a contributions row (#7)', () => {
+    const results = runSensitivity(BASE, 50)
+    const labels = results.map((r) => r.label.toLowerCase())
+    expect(labels.some((l) => l.includes('retirement age'))).toBe(true)
+    expect(labels.some((l) => l.includes('contribution'))).toBe(true)
+  })
+
   it('results are sorted by descending absolute impact', () => {
     const results = runSensitivity(BASE, 100)
     const impacts = results.map((r) => Math.max(Math.abs(r.loDelta), Math.abs(r.hiDelta)))

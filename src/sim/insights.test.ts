@@ -139,7 +139,9 @@ describe('computeInsights — retire-one-year-later rule', () => {
     const later = insights.find((i) => i.title.toLowerCase().includes('one more year'))
     expect(later).toBeDefined()
     expect(later?.tone).toBe('accent')
-  })
+    // Runs two full 1000-run simulations (base + the rule's bumped re-run); under
+    // coverage instrumentation that can edge past the 30s default, so allow 60s.
+  }, 60_000)
 
   it('bug #6: the same effect is suppressed at a tiny run count (cannot beat noise)', () => {
     const inp = inputs({
