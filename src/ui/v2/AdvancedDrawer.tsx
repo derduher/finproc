@@ -388,18 +388,26 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
           </Acc>
 
           {/* Taxes */}
-          <Acc title="Taxes" value={`Flat ${Math.round(person.marginalTaxRate * 100)}% · LTCG ${Math.round(person.ltcgRate * 100)}%`}>
-            <div style={{ display: 'flex', gap: 16 }}>
+          <Acc title="Taxes" value={`${(person.filingStatus ?? 'single') === 'married' ? 'Married' : 'Single'} · ${Math.round(person.marginalTaxRate * 100)}% bracket`}>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span className="micro">marginal income tax %</span>
+                <span className="micro">filing status</span>
+                <select
+                  aria-label="Filing status"
+                  value={person.filingStatus ?? 'single'}
+                  onChange={(e) => patchPerson({ filingStatus: e.target.value as 'single' | 'married' })}
+                  style={pill}
+                >
+                  <option value="single">Single</option>
+                  <option value="married">Married filing jointly</option>
+                </select>
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span className="micro">working-years marginal rate %</span>
                 <input type="number" aria-label="Marginal tax rate" value={Math.round(person.marginalTaxRate * 100)} onChange={(e) => patchPerson({ marginalTaxRate: Number(e.target.value) / 100 })} style={{ ...pill, width: 72 }} />
               </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span className="micro">long-term capital gains %</span>
-                <input type="number" aria-label="LTCG rate" value={Math.round(person.ltcgRate * 100)} onChange={(e) => patchPerson({ ltcgRate: Number(e.target.value) / 100 })} style={{ ...pill, width: 72 }} />
-              </label>
             </div>
-            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>Retirement withdrawals use progressive brackets + the standard deduction; this rate sets your working-years take-home.</div>
+            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>Retirement withdrawals use progressive federal brackets, the standard deduction, partial Social Security taxation, and 0/15/20% capital gains for your filing status. The marginal rate above only sets your working-years take-home.</div>
           </Acc>
 
           {/* Plan-to age */}
