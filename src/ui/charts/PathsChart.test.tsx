@@ -24,6 +24,23 @@ function renderChart(extra = {}) {
 }
 
 describe('PathsChart', () => {
+  it('sizes the axis to the longest series, not the first path (stochastic longevity)', () => {
+    // Under stochastic longevity sample paths have different lengths — the first
+    // run may die early. The chart must extend to the longest series (here the
+    // median + a long path reach age 71), not truncate to the first path (age 67).
+    const variablePaths: SamplePath[] = [
+      { balances: [100, 90], depleteAge: undefined, cutYears: [], raiseYears: [] }, // died early
+      { balances: [100, 95, 80, 70, 60, 50], depleteAge: undefined, cutYears: [], raiseYears: [] },
+    ]
+    const longMedian = [100, 95, 85, 75, 65, 55]
+    const { container } = render(
+      <PathsChart samplePaths={variablePaths} median={longMedian} currentAge={65} retireAge={66} maxAge={68} />,
+    )
+    const labels = Array.from(container.querySelectorAll('text')).map((t) => t.textContent)
+    // Right-edge tick reaches the real last age (65 + 6 = 71), beyond the plan-to age.
+    expect(labels).toContain('71')
+  })
+
   it('renders an SVG with one line per path plus the median', () => {
     const { container } = renderChart()
     expect(container.querySelector('svg')).not.toBeNull()
