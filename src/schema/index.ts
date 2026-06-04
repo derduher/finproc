@@ -59,6 +59,13 @@ export const PersonSchema = z
     salaryGrowthRate: z.number().min(-1).max(1),
     marginalTaxRate: z.number().min(0).max(1),
     ltcgRate: z.number().min(0).max(1),
+    /**
+     * Tax filing status. Drives the standard deduction, ordinary brackets, LTCG
+     * breakpoints, and Social Security taxation thresholds in the withdrawal-phase
+     * tax model ([`sim/tax.ts`]). Optional for back-compat with older URLs; the
+     * engine treats an absent value as 'single' (matching the single-person model).
+     */
+    filingStatus: z.enum(['single', 'married']).optional(),
   })
   .refine((p) => p.maxAge > p.currentAge, {
     message: 'maxAge must be greater than currentAge',
@@ -258,6 +265,7 @@ export function defaultInputs(): SimulationInputs {
       salaryGrowthRate: 0.03,
       marginalTaxRate: 0.24,
       ltcgRate: 0.15,
+      filingStatus: 'single',
     },
     accounts: [],
     initialStockGrowthMin: 0.04,

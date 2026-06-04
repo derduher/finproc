@@ -1,13 +1,38 @@
 import { SimAccount } from './account'
+import { annualToMonthlyRate, inflate, rmdDivisor } from '../math'
 import {
-  annualToMonthlyRate,
-  inflate,
-  rmdDivisor,
-  taxableWithdrawalGrossUp,
-  traditionalWithdrawalGrossUp,
-} from '../math'
+  ordinaryTax,
+  taxableSocialSecurity,
+  ltcgTaxOnGain,
+  grossUpOrdinary,
+  grossUpTaxableGain,
+  STANDARD_DEDUCTION,
+} from './tax'
+import type { FilingStatus } from './tax'
 import { WithdrawalStrategy } from '../schema'
 import type { SimulationInputs } from '../schema'
+
+/**
+ * Per-year tax accounting carried through the withdrawal helpers. Amounts are in
+ * **today's dollars**; `priceLevel` converts to/from nominal (nominal = real ×
+ * priceLevel). `ordinaryReal` and `ltcgReal` accumulate income realized so far
+ * this year so each successive withdrawal is taxed at its correct marginal
+ * position (brackets fill, the standard deduction is consumed once, and LTCG
+ * stacks on top of ordinary income).
+ */
+interface TaxContext {
+  fs: FilingStatus
+  priceLevel: number
+  /** Gross ordinary income realized this year (incl. taxable SS), today's $. */
+  ordinaryReal: number
+  /** Realized long-term gains this year, today's $. */
+  ltcgReal: number
+}
+
+/** Total taxable income sitting *below* the next LTCG dollar (today's $). */
+function incomeBelowGains(tax: TaxContext): number {
+  return Math.max(0, tax.ordinaryReal - STANDARD_DEDUCTION[tax.fs]) + tax.ltcgReal
+}
 
 export interface SampledRates {
   /** Annual nominal stock growth for this run */
@@ -86,6 +111,7 @@ export function runSingleProjection(
     spendingPolicy,
   } = inputs
 
+  const filingStatus: FilingStatus = person.filingStatus ?? 'single'
   const guardrails = spendingPolicy === 'guardrails'
   // Guardrails state, persisted across years: the spend ratchets and stays at the
   // new level (inflation-adjusted) until the next trigger.
@@ -205,9 +231,19 @@ export function runSingleProjection(
     if (!depleted) {
       const inflatedExpenses = annualExpenses * priceLevel
 
-      // Social Security income (treated as fully tax-free per spec). Entered in
-      // present dollars, so it holds today's purchasing power: convert by the
-      // realized price level from the start, not from claim age.
+      // Per-year tax accounting (today's dollars; brackets track inflation via the
+      // realized price level, so a constant real spend stays in a constant real
+      // bracket). Seeded below with the taxable portion of Social Security.
+      const tax: TaxContext = {
+        fs: filingStatus,
+        priceLevel,
+        ordinaryReal: 0,
+        ltcgReal: 0,
+      }
+
+      // Social Security income. Entered in present dollars, so it holds today's
+      // purchasing power: convert by the realized price level from the start, not
+      // from claim age.
       let ssIncome = 0
       if (socialSecurity && yearEndAge > socialSecurity.claimAge) {
         ssIncome = socialSecurity.annualAmountPresentDollars * priceLevel
@@ -254,6 +290,23 @@ export function runSingleProjection(
         disposableIncome = Math.max(0, afterTaxSalary - afterTaxContrib)
       }
 
+      // Partial Social Security taxation. Estimate the year's other taxable income
+      // (the portfolio draw needed after SS + salary) to size provisional income,
+      // then seed the year's ordinary-income stack with the taxable SS portion so
+      // later traditional withdrawals stack on top of it. The cash value of SS is
+      // reduced by the tax owed on its taxable portion (the rest of that ordinary
+      // tax — on traditional dollars above SS — is covered by grossing up those
+      // withdrawals). Both `tax.ordinaryReal` and `ssNet` are in nominal terms via
+      // `priceLevel`.
+      let ssNet = ssIncome
+      if (ssIncome > 0) {
+        const ssReal = ssIncome / priceLevel
+        const portfolioNeedEst = Math.max(0, inflatedExpenses + oneTimeTotal - ssIncome - disposableIncome)
+        const taxableSSReal = taxableSocialSecurity(ssReal, portfolioNeedEst / priceLevel, filingStatus)
+        tax.ordinaryReal = taxableSSReal
+        ssNet = ssIncome - ordinaryTax(taxableSSReal, filingStatus) * priceLevel
+      }
+
       // Per-account balance before any withdrawals this year — used to size RMDs
       // (a floor based on the start-of-year balance), measure spending, and judge
       // the guardrails withdrawal rate.
@@ -267,7 +320,7 @@ export function runSingleProjection(
       // Only engages in retirement (when actually drawing from the portfolio).
       let spendThisYear = inflatedExpenses
       if (guardrails && yearStartAge >= effectiveRetirementAge && balBeforeExpense > 0) {
-        const recurringNet = inflatedExpenses * spendMultiplier - ssIncome
+        const recurringNet = inflatedExpenses * spendMultiplier - ssNet
         if (recurringNet > 0) {
           const wr = recurringNet / balBeforeExpense
           if (baseWithdrawalRate === undefined) {
@@ -283,7 +336,7 @@ export function runSingleProjection(
         spendThisYear = inflatedExpenses * spendMultiplier
       }
 
-      const netNeed = Math.max(0, spendThisYear + oneTimeTotal - ssIncome - disposableIncome)
+      const netNeed = Math.max(0, spendThisYear + oneTimeTotal - ssNet - disposableIncome)
 
       let shortfall = 0
       if (netNeed > 0) {
@@ -293,8 +346,7 @@ export function runSingleProjection(
           yearStartAge,
           withdrawalStrategy,
           withdrawalOrder ?? [],
-          person.marginalTaxRate,
-          person.ltcgRate,
+          tax,
           false,
         )
 
@@ -311,8 +363,7 @@ export function runSingleProjection(
             yearStartAge,
             withdrawalStrategy,
             withdrawalOrder ?? [],
-            person.marginalTaxRate,
-            person.ltcgRate,
+            tax,
             true,
           )
         }
@@ -345,9 +396,10 @@ export function runSingleProjection(
 
       // RMDs (spec §3.4): at age 73+, each traditional account must distribute at
       // least balance/divisor. Withdrawals already taken this year count toward the
-      // RMD floor; only the remaining shortfall is forced out. Proceeds beyond
-      // spending need are taxed at the marginal rate and the after-tax remainder is
-      // reinvested in taxable — never destroyed. Runs regardless of spending need.
+      // RMD floor; only the remaining shortfall is forced out. Forced proceeds are
+      // ordinary income — taxed at the progressive marginal position above whatever
+      // was already realized this year — and the after-tax remainder is reinvested
+      // in taxable, never destroyed. Runs regardless of spending need.
       if (!depleted) {
         const divisor = rmdDivisor(yearStartAge)
         if (divisor !== undefined) {
@@ -362,7 +414,12 @@ export function runSingleProjection(
             if (force <= 0 || acc.getBalance() <= 0) continue
             const gross = acc.withdraw(force, yearStartAge)
             if (gross <= 0) continue
-            const net = gross * (1 - person.marginalTaxRate)
+            const grossReal = gross / priceLevel
+            const incTaxReal =
+              ordinaryTax(tax.ordinaryReal + grossReal, filingStatus) -
+              ordinaryTax(tax.ordinaryReal, filingStatus)
+            tax.ordinaryReal += grossReal
+            const net = (grossReal - incTaxReal) * priceLevel
             rmdSink().deposit(net)
           }
         }
@@ -403,15 +460,14 @@ function makeWithdrawals(
   currentAge: number,
   strategy: WithdrawalStrategy,
   userOrder: string[],
-  marginalRate: number,
-  ltcgRate: number,
+  tax: TaxContext,
   forceUnlock: boolean,
 ): number {
   let remaining = netNeed
   const ordered = orderAccounts(accounts, strategy, userOrder, currentAge, forceUnlock)
 
   if (strategy === WithdrawalStrategy.Proportional) {
-    return makeProportionalWithdrawals(accounts, netNeed, currentAge, marginalRate, ltcgRate, forceUnlock)
+    return makeProportionalWithdrawals(accounts, netNeed, currentAge, tax, forceUnlock)
   }
 
   for (const acc of ordered) {
@@ -420,13 +476,13 @@ function makeWithdrawals(
 
     const balBefore = acc.getBalance()
     const basisBefore = acc.getCostBasis()
-    const gross = grossNeeded(acc, remaining, marginalRate, ltcgRate)
+    const gross = grossNeeded(acc, remaining, tax)
     // forceUnlock: bypass SimAccount's withdrawalStartAge check by passing
     // undefined (per its documented "omit to skip check" behavior).
     const actualGross = acc.withdraw(gross, forceUnlock ? undefined : currentAge)
     if (actualGross <= 0) continue
 
-    const netDelivered = netFromGross(acc, actualGross, balBefore, basisBefore, marginalRate, ltcgRate)
+    const netDelivered = netFromGross(acc, actualGross, balBefore, basisBefore, tax)
     remaining = Math.max(0, remaining - netDelivered)
   }
 
@@ -437,8 +493,7 @@ function makeProportionalWithdrawals(
   accounts: SimAccount[],
   netNeed: number,
   currentAge: number,
-  marginalRate: number,
-  ltcgRate: number,
+  tax: TaxContext,
   forceUnlock: boolean,
 ): number {
   const eligible = accounts.filter(
@@ -456,42 +511,59 @@ function makeProportionalWithdrawals(
     const netShare = netNeed * share
     const balBefore = acc.getBalance()
     const basisBefore = acc.getCostBasis()
-    const gross = grossNeeded(acc, netShare, marginalRate, ltcgRate)
+    const gross = grossNeeded(acc, netShare, tax)
     const actualGross = acc.withdraw(gross, forceUnlock ? undefined : currentAge)
     if (actualGross <= 0) continue
-    const net = netFromGross(acc, actualGross, balBefore, basisBefore, marginalRate, ltcgRate)
+    const net = netFromGross(acc, actualGross, balBefore, basisBefore, tax)
     remaining = Math.max(0, remaining - net)
   }
 
   return remaining
 }
 
-function grossNeeded(
-  acc: SimAccount,
-  netNeeded: number,
-  marginalRate: number,
-  ltcgRate: number,
-): number {
+/**
+ * Gross withdrawal to request so the account nets `netNeeded` (nominal), given the
+ * year's tax state. Reads `tax` but does not mutate it — the realized income is
+ * committed in `netFromGross` against the actual (possibly balance-capped) gross.
+ */
+function grossNeeded(acc: SimAccount, netNeeded: number, tax: TaxContext): number {
   if (acc.type === 'roth') return netNeeded
-  if (acc.type === 'traditional') return traditionalWithdrawalGrossUp(netNeeded, marginalRate)
-  return taxableWithdrawalGrossUp(netNeeded, acc.getBalance(), acc.getCostBasis(), ltcgRate)
+  const netReal = netNeeded / tax.priceLevel
+  if (acc.type === 'traditional') {
+    return grossUpOrdinary(netReal, tax.ordinaryReal, tax.fs) * tax.priceLevel
+  }
+  const bal = acc.getBalance()
+  const gainFrac = bal > 0 ? Math.max(0, (bal - acc.getCostBasis()) / bal) : 0
+  return grossUpTaxableGain(netReal, gainFrac, incomeBelowGains(tax), tax.fs) * tax.priceLevel
 }
 
+/**
+ * Net delivered by an actual gross withdrawal, committing the realized income into
+ * the year's tax state (ordinary for traditional/RMD, LTCG for taxable gains).
+ */
 function netFromGross(
   acc: SimAccount,
   gross: number,
   balBefore: number,
   basisBefore: number,
-  marginalRate: number,
-  ltcgRate: number,
+  tax: TaxContext,
 ): number {
   if (acc.type === 'roth') return gross
-  if (acc.type === 'traditional') return gross * (1 - marginalRate)
+  const grossReal = gross / tax.priceLevel
+  if (acc.type === 'traditional') {
+    const incTax =
+      ordinaryTax(tax.ordinaryReal + grossReal, tax.fs) - ordinaryTax(tax.ordinaryReal, tax.fs)
+    tax.ordinaryReal += grossReal
+    return (grossReal - incTax) * tax.priceLevel
+  }
   // taxable: gain fraction derived from the pre-withdrawal balance and basis.
   // (Reconstructing from post-withdrawal state breaks when the account is fully
   // drained — basis and balance both go to 0, yielding 0/0 = NaN.)
   const gainFrac = balBefore > 0 ? Math.max(0, (balBefore - basisBefore) / balBefore) : 0
-  return gross - gross * gainFrac * ltcgRate
+  const gainReal = grossReal * gainFrac
+  const ltcgTax = ltcgTaxOnGain(gainReal, incomeBelowGains(tax), tax.fs)
+  tax.ltcgReal += gainReal
+  return (grossReal - ltcgTax) * tax.priceLevel
 }
 
 function orderAccounts(

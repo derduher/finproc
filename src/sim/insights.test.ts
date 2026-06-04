@@ -121,8 +121,8 @@ describe('computeInsights — retire-one-year-later rule', () => {
     }
   })
 
-  it('bug #6: a real ~9pp effect still fires at full (1000-run) resolution', () => {
-    // $1.3M, retire 62, expenses 65k → base ≈ 56%, +1yr ≈ 65% (delta ≈ 9pp, well
+  it('bug #6: a real, large effect still fires at full (1000-run) resolution', () => {
+    // $1.3M, retire 62, expenses 80k → base ≈ 30%, +1yr ≈ 60% (delta ≈ 30pp, far
     // above the significance bar at n=1000). Guards against the gate over-suppressing.
     const inp = inputs({
       person: { ...defaultInputs().person, currentAge: 60, maxAge: 90, annualSalary: 120_000 },
@@ -132,7 +132,7 @@ describe('computeInsights — retire-one-year-later rule', () => {
         contributionAmount: 2500, contributionType: 'flat', contributionFrequency: 'monthly',
         contributionEndAge: 62, withdrawalStartAge: 59,
       }],
-      annualExpenses: 65_000,
+      annualExpenses: 80_000,
     })
     const result = runMonteCarlo(inp, 1000, 42)
     const insights = computeInsights(inp, result, { runCount: 1000 })

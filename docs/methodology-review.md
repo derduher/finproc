@@ -54,7 +54,7 @@ Status legend: ✅ done · ◑ partial · ⬜ not started.
 | 5 | **P1** | ✅ | Traditional dollars effectively double-taxed (contrib not pre-tax, then grossed-up on exit) | Accuracy | M |
 | 6 | **P1** | ✅ | Insights @100 runs / sensitivity @200–400 runs report deltas inside MC noise | Risk, Transparency | S |
 | 7 | **P2** | ⬜ | "Retirement age" tornado bar actually perturbs `currentAge`; contribution-amount row missing | Transparency | S |
-| 8 | **P2** | ⬜ | Flat marginal tax, SS tax-free, no 0% LTCG bracket, no bracket-filling | Accuracy | M |
+| 8 | **P2** | ✅ | Flat marginal tax, SS tax-free, no 0% LTCG bracket, no bracket-filling. **Done: progressive withdrawal-phase tax** — standard deduction + statutory ordinary brackets, partial SS taxation (provisional income), 0/15/20% LTCG stacked on ordinary income; filing-status aware; brackets track inflation. | Accuracy | M |
 | 9 | **P2** | ⬜ | Independent inflation/return sampling; no valuation-aware starting return | Accuracy | M |
 | 10 | **P2** | ⬜ | Deterministic `maxAge` = no longevity risk distribution | Risk | M |
 | 11 | **P2** | ✅ | Flat-real lifetime spending; no dynamic/guardrail withdrawals | Accuracy, Risk | M |
@@ -245,6 +245,33 @@ Flat marginal rate on all traditional withdrawals — no standard deduction or b
 promotes). SS treated fully tax-free ([`projection.ts:132`](../src/sim/projection.ts)) — points
 the opposite way. No 0% LTCG bracket, aggregate basis only. **Fix (incremental):** at minimum a
 standard-deduction offset + two-bracket fill on traditional withdrawals; partial SS taxation.
+
+**✅ Done — progressive withdrawal-phase tax.** New [`sim/tax.ts`](../src/sim/tax.ts) holds the
+2025 federal schedule (single + married): standard deduction, the seven ordinary brackets, the
+0/15/20% LTCG breakpoints, and the Social Security provisional-income worksheet. The projection
+threads a per-year **`TaxContext`** (today's dollars; `priceLevel` converts to/from nominal) through
+the withdrawal helpers so each successive dollar is taxed at its correct marginal position —
+brackets fill, the deduction is consumed once, and LTCG stacks on top of ordinary income.
+Concretely:
+- **Traditional withdrawals & RMDs** gross up against the progressive ordinary schedule instead of
+  a flat rate. A ~$40k retiree draw now costs roughly a 7% effective rate (deduction + 10/12%
+  brackets), not the old 25% — the dominant correction (it was overstating retirement tax).
+- **Social Security** is partly taxable (up to 85%) via the provisional-income rule; the benefit's
+  spendable cash is reduced by the tax on its taxable portion, which then seeds the year's ordinary
+  income so traditional withdrawals stack above it.
+- **Taxable accounts** realize LTCG at 0/15/20% by stacking the gain on the year's taxable income —
+  so a low-income retiree fills the 0% bracket first.
+- Brackets are expressed in **today's dollars** and scaled by the realized price level, so a
+  constant *real* spend stays in a constant real bracket (this also pre-empts the #12 "frozen
+  nominal limits" artifact for taxes).
+
+The working-years take-home math still uses the single `person.marginalTaxRate` (that's the #5
+accumulation-phase lever, unchanged). Filing status is a new optional `person.filingStatus`
+(defaults to `single`, matching the single-person model); surfacing it in the Advanced drawer is a
+small follow-up. **Approximations documented in code:** provisional income for SS uses an estimate
+of the year's portfolio draw (avoids a fixed-point loop through the balance-mutating withdrawal
+pass), and LTCG stacking uses ordinary income realized *so far* in the withdrawal order rather than
+the year's final total. State income tax remains out of scope.
 
 ### 9. Independent inflation + non-valuation-aware returns
 Inflation and returns sampled independently though historically correlated (persistent high
