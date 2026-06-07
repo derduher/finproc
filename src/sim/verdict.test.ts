@@ -15,6 +15,7 @@ function reads(over: Partial<OutcomeReads> = {}): OutcomeReads {
     legacyP90: 0,
     worstShortfallAge: undefined,
     rareShortfallAge: undefined,
+    retireAge: 65,
     maxAge: 95,
     ...over,
   }
