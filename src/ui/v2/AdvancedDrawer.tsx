@@ -10,8 +10,10 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import { MoneyInput } from '../shared/MoneyInput'
-import { WithdrawalStrategy } from '../../schema'
-import type { Account, OneTimeExpense, ContributionFrequency } from '../../schema'
+import { WithdrawalStrategy, EXPENSE_CATEGORIES } from '../../schema'
+import type { Account, OneTimeExpense, ContributionFrequency, ExpenseItem } from '../../schema'
+import { createExpenseItem } from '../../sim/expenses'
+import { suggestedExpenses } from '../../sim/expenseSuggestions'
 import {
   ACCOUNT_KIND_LABELS,
   accountKind,
@@ -82,7 +84,15 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
   const inputs = useStore((s) => s.inputs)
   const patchInputs = useStore((s) => s.patchInputs)
   const patchPerson = useStore((s) => s.patchPerson)
+  const setBaselineExpenses = useStore((s) => s.setBaselineExpenses)
   const { person } = inputs
+
+  const baseline = inputs.baselineExpenses
+  const updateBaseline = (id: string, patch: Partial<ExpenseItem>) =>
+    setBaselineExpenses(baseline.map((it) => (it.id === id ? { ...it, ...patch } : it)))
+  const removeBaseline = (id: string) => setBaselineExpenses(baseline.filter((it) => it.id !== id))
+  const addBaseline = () => setBaselineExpenses([...baseline, createExpenseItem({ label: 'New expense' })])
+  const suggestions = suggestedExpenses(inputs)
 
   const setAccounts = (accounts: Account[]) => patchInputs({ accounts })
   const updateAccount = (i: number, fn: (a: Account) => Account) =>
@@ -284,6 +294,90 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
               )
             })}
             <button className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} onClick={addAccount}>+ Add an account</button>
+          </Acc>
+
+          {/* Baseline expenses */}
+          <Acc
+            title="Baseline expenses"
+            value={`${fmtK(inputs.annualExpenses)}/yr · ${baseline.length} item${baseline.length === 1 ? '' : 's'}`}
+            defaultOpen
+          >
+            <div data-testid="baseline-expenses-section">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {baseline.map((it) => (
+                  <div data-baseline-item key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <input
+                      aria-label="Baseline expense name"
+                      value={it.label}
+                      onChange={(e) => updateBaseline(it.id, { label: e.target.value })}
+                      style={{ ...pill, flex: '1 1 130px', minWidth: 110 }}
+                    />
+                    <select
+                      aria-label="Baseline expense category"
+                      value={it.category}
+                      onChange={(e) => updateBaseline(it.id, { category: e.target.value as ExpenseItem['category'] })}
+                      style={{ ...pill, textTransform: 'capitalize' }}
+                    >
+                      {EXPENSE_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    <span className="lever-value" style={{ padding: '4px 8px' }}>
+                      <span className="lv-pre">$</span>
+                      <input
+                        type="number"
+                        aria-label="Baseline expense amount"
+                        min={0}
+                        step={500}
+                        value={it.annualAmountPresentDollars}
+                        onChange={(e) => updateBaseline(it.id, { annualAmountPresentDollars: Math.max(0, Number(e.target.value)) })}
+                        style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: 76 }}
+                      />
+                    </span>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      aria-label="Remove baseline expense"
+                      disabled={baseline.length <= 1}
+                      onClick={() => removeBaseline(it.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} onClick={addBaseline}>
+                + add baseline expense
+              </button>
+
+              {suggestions.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div className="micro" style={{ color: 'var(--ink-3)', marginBottom: 6 }}>commonly missed — click to add</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {suggestions.map((s) => (
+                      <button
+                        key={s.key}
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        title={s.blurb}
+                        onClick={() =>
+                          setBaselineExpenses([
+                            ...baseline,
+                            createExpenseItem({ label: s.label, category: s.category, annualAmountPresentDollars: s.annualAmountPresentDollars }),
+                          ])
+                        }
+                        style={{ border: '1px dashed var(--line-strong)' }}
+                      >
+                        + {s.label} <span className="micro" style={{ color: 'var(--ink-3)' }}>{fmtK(s.annualAmountPresentDollars)}/yr</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="micro" style={{ marginTop: 8, color: 'var(--ink-3)' }}>
+                Recurring annual spending in today's $. The total flows into the projection.
+              </div>
+            </div>
           </Acc>
 
           {/* One-time expenditures */}
