@@ -13,6 +13,7 @@ import { useEarliestRetirementAge } from '../../hooks/useEarliestRetirementAge'
 import { useRequiredExtraSavings } from '../../hooks/useRequiredExtraSavings'
 import { deflateResult } from '../../sim/displayMode'
 import { deriveOutcomeReads } from '../../sim/outcome'
+import { buildVerdict, inflatedSpend } from '../../sim/verdict'
 import { formatMoneyAbbreviated as fmt } from '../../math'
 import { TopBar2 } from './TopBar2'
 import { CoreLevers, totalSaved } from './CoreLevers'
@@ -85,8 +86,27 @@ export function MainScreen() {
               }))
               const rep = guardrails ? representativePath(result) : undefined
 
+              const inflMid = (inputs.initialInflationMin + inputs.initialInflationMax) / 2
+              const horizon = inputs.person.maxAge - inputs.person.currentAge
+
               return (
                 <>
+                  {/* one-sentence verdict — the answer before the charts */}
+                  {spend != null && (
+                    <div
+                      style={{
+                        marginBottom: 18,
+                        fontSize: 19,
+                        lineHeight: 1.4,
+                        fontFamily: 'var(--font-display)',
+                        color: 'var(--ink)',
+                        maxWidth: 900,
+                      }}
+                    >
+                      {buildVerdict(reads, inputs.person.retirementAge)}
+                    </div>
+                  )}
+
                   {/* hero + levers */}
                   <div className="v2-hero-grid">
                     {spend == null ? (
@@ -98,6 +118,10 @@ export function MainScreen() {
                     ) : (
                       <div>
                         <SustainableHero reads={reads} />
+                        <div className="micro" style={{ marginTop: 8, maxWidth: 460 }}>
+                          ≈ {fmt(inflatedSpend(reads.sustainable, inflMid, horizon))}/yr in age-{inputs.person.maxAge} dollars
+                          at {Math.round(inflMid * 100)}% inflation — the projection already accounts for this.
+                        </div>
                         <EarliestRetireRead
                           age={earliestAge}
                           planRetireAge={inputs.person.retirementAge}
