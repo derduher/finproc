@@ -131,6 +131,27 @@ describe('runMonteCarlo — percentile aggregation', () => {
   })
 })
 
+describe('runMonteCarlo — sample path drivers', () => {
+  it('records per-year returns and inflation aligned to each sampled balance series', () => {
+    const result = runMonteCarlo(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 80 },
+        accounts: [{ ...RICH_ACCOUNT }],
+        annualExpenses: 60000,
+      }),
+      50,
+      42,
+    )
+    expect(result.samplePaths.length).toBeGreaterThan(0)
+    for (const p of result.samplePaths) {
+      expect(p.returns).toBeDefined()
+      expect(p.inflation).toBeDefined()
+      expect(p.returns!.length).toBe(p.balances.length)
+      expect(p.inflation!.length).toBe(p.balances.length)
+    }
+  })
+})
+
 describe('runMonteCarlo — memory budget', () => {
   it('1000 runs, 30-year horizon with many accounts stays under 100MB', () => {
     const multiAccounts = [RICH_ACCOUNT, { ...RICH_ACCOUNT, id: 'b' }, { ...RICH_ACCOUNT, id: 'c' }]

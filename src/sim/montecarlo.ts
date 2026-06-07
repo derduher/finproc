@@ -28,6 +28,14 @@ export interface SamplePath {
   cutYears: number[]
   /** Ages where guardrails raised spending (empty for the flat policy). */
   raiseYears: number[]
+  /**
+   * Per-year nominal stock return drawn for this run, aligned to `balances`.
+   * Optional: only populated for sampled runs; absent on legacy cached results
+   * and on hand-built test fixtures.
+   */
+  returns?: number[]
+  /** Per-year inflation drawn for this run, aligned to `balances`. */
+  inflation?: number[]
 }
 
 /** Depletion-timing read: the age by which the worst `fraction` of runs run short. */
@@ -133,6 +141,8 @@ export function runMonteCarlo(
   const perRunYears: import('./projection').YearEndState[][] = []
   // Guardrails adjustments, captured only for the sampled runs (for the chart).
   const sampleAdjustments: SpendAdjustment[][] = []
+  // Per-year rate schedules for the sampled runs (for the path narrative).
+  const sampleRates: SampledRates[][] = []
   const sampleSize = Math.min(sampleCount, runCount)
 
   // Emit ~one project event per 5% of runs (min 10, max 100).
@@ -173,7 +183,10 @@ export function runMonteCarlo(
       balancesByYear[y].push(result.yearlyResults[y].totalBalance)
     }
     perRunYears.push(result.yearlyResults)
-    if (run < sampleSize) sampleAdjustments.push(result.spendAdjustments)
+    if (run < sampleSize) {
+      sampleAdjustments.push(result.spendAdjustments)
+      sampleRates.push(yearlyRates)
+    }
   }
 
   // Trim trailing years no run ever reached (under stochastic longevity the cohort
@@ -205,11 +218,14 @@ export function runMonteCarlo(
     .slice(0, sampleSize)
     .map((yrs, i) => {
       const adj = sampleAdjustments[i] ?? []
+      const rates = (sampleRates[i] ?? []).slice(0, yrs.length)
       return {
         balances: yrs.map((y) => y.totalBalance),
         depleteAge: yrs.find((y) => y.totalBalance === 0)?.age,
         cutYears: adj.filter((a) => a.kind === 'cut').map((a) => a.age),
         raiseYears: adj.filter((a) => a.kind === 'raise').map((a) => a.age),
+        returns: rates.map((r) => r.stockGrowth),
+        inflation: rates.map((r) => r.inflation),
       }
     })
 
