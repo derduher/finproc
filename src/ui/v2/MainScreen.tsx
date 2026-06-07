@@ -22,6 +22,7 @@ import { PathsChart, type PathExpenseMarker } from '../charts/PathsChart'
 import { GuardrailTimeline } from '../charts/GuardrailTimeline'
 import { AdvancedDrawer } from './AdvancedDrawer'
 import { MethodologyDrawer } from './MethodologyDrawer'
+import { DisclaimerBanner } from './DisclaimerBanner'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
 /** Sample path whose ending balance is closest to the median — a representative run. */
@@ -58,6 +59,7 @@ export function MainScreen() {
 
   return (
     <div className="hf" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+      <DisclaimerBanner />
       <TopBar2 onAdvanced={() => setDrawer('advanced')} />
       <div className="v2-screen" style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ maxWidth: CHART_W, margin: '0 auto' }}>
