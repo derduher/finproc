@@ -25,6 +25,8 @@ import { AdvancedDrawer } from './AdvancedDrawer'
 import { MethodologyDrawer } from './MethodologyDrawer'
 import { DisclaimerBanner } from './DisclaimerBanner'
 import { PathStories } from './PathStories'
+import { StressTest } from './StressTest'
+import { useHistoricalStress } from '../../hooks/useHistoricalStress'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
 /** Sample path whose ending balance is closest to the median — a representative run. */
@@ -48,6 +50,7 @@ export function MainScreen() {
   const setDisplayMode = useStore((s) => s.setDisplayMode)
   const patchInputs = useStore((s) => s.patchInputs)
   const [drawer, setDrawer] = useState<null | 'advanced' | 'methodology'>(null)
+  const [stressId, setStressId] = useState<string | null>(null)
 
   const { result: rawResult, loading } = useSimulation(inputs)
   const { spend } = useSustainableSpend(inputs)
@@ -58,6 +61,7 @@ export function MainScreen() {
 
   const CHART_W = 1320
   const guardrails = inputs.spendingPolicy === 'guardrails'
+  const stress = useHistoricalStress(inputs, displayMode)
 
   return (
     <div className="hf" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
@@ -87,6 +91,16 @@ export function MainScreen() {
                 label: e.label,
               }))
               const rep = guardrails ? representativePath(result) : undefined
+
+              // Selected crisis → a bold deterministic overlay on the futures chart.
+              const stressView = stress.scenarios.find((s) => s.scenario.id === stressId)
+              const stressOverlay = stressView
+                ? {
+                    label: `if ${stressView.scenario.name} repeated at retirement`,
+                    balances: stressView.balances,
+                    tone: stressView.survived ? ('accent' as const) : ('bad' as const),
+                  }
+                : undefined
 
               const inflMid = (inputs.initialInflationMin + inputs.initialInflationMax) / 2
               const horizon = inputs.person.maxAge - inputs.person.currentAge
@@ -173,6 +187,7 @@ export function MainScreen() {
                       startBalance={totalSaved(inputs)}
                       ssAge={inputs.socialSecurity?.claimAge}
                       expenses={expenses}
+                      overlay={stressOverlay}
                       width={CHART_W}
                       height={356}
                       holdLabel={`~${Math.round(reads.holdRate * 100)}% of 1,000 runs hold your ${fmt(target)} target`}
@@ -201,6 +216,11 @@ export function MainScreen() {
                       currentAge={inputs.person.currentAge}
                       retireAge={inputs.person.retirementAge}
                     />
+                  </div>
+
+                  {/* historical stress test */}
+                  <div style={{ marginTop: 18 }}>
+                    <StressTest stress={stress} selectedId={stressId} onSelect={setStressId} />
                   </div>
 
                   {/* demoted success + assumptions */}
