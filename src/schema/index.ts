@@ -143,6 +143,32 @@ export const OneTimeExpenseSchema = z.object({
 
 export type OneTimeExpense = z.infer<typeof OneTimeExpenseSchema>
 
+// ─── Baseline expense line items ──────────────────────────────────────────────
+/** Coarse buckets used to group baseline spending and to seed suggested expenses. */
+export const EXPENSE_CATEGORIES = [
+  'housing',
+  'healthcare',
+  'food',
+  'transportation',
+  'insurance',
+  'taxes',
+  'discretionary',
+  'other',
+] as const
+
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number]
+
+/** A single baseline (recurring annual) expense, in today's dollars. */
+export const ExpenseItemSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  category: z.enum(EXPENSE_CATEGORIES),
+  /** Annual amount in today's dollars; inflated forward like the aggregate baseline. */
+  annualAmountPresentDollars: z.number().min(0),
+})
+
+export type ExpenseItem = z.infer<typeof ExpenseItemSchema>
+
 // ─── Social Security ──────────────────────────────────────────────────────────
 const SocialSecuritySchema = z.object({
   annualAmountPresentDollars: z.number().min(0),
@@ -169,8 +195,18 @@ export const SimulationInputsSchema = z
     /** Additional breakpoints (sorted ascending by startAge) */
     breakpoints: z.array(BreakpointSchema),
 
-    /** Annual baseline expenses in today's dollars */
+    /**
+     * Aggregate annual baseline expenses in today's dollars. Kept as the canonical
+     * scalar consumed by the simulation/solvers; the `transform` below derives it
+     * from `baselineExpenses` so the breakdown is the effective source of truth.
+     */
     annualExpenses: z.number().min(0),
+    /**
+     * Itemized baseline spending. Optional on input for back-compat with URLs that
+     * predate itemization; the `transform` normalizes it to always be present
+     * (a single "General living" item synthesized from `annualExpenses` when absent).
+     */
+    baselineExpenses: z.array(ExpenseItemSchema).optional(),
     socialSecurity: SocialSecuritySchema.optional(),
     oneTimeExpenses: z.array(OneTimeExpenseSchema),
 
@@ -218,6 +254,26 @@ export const SimulationInputsSchema = z
     },
     { message: 'Breakpoints must be in strictly ascending order by startAge', path: ['breakpoints'] },
   )
+  // Normalize the baseline-expense pair so they're always consistent:
+  //   • itemized → `annualExpenses` is the sum of the items (items win)
+  //   • legacy aggregate-only → synthesize a single "General living" item
+  // After parse, `baselineExpenses` is always present and `annualExpenses` always
+  // equals its sum, so the simulation (which reads `annualExpenses`) is unchanged.
+  .transform((s) => {
+    const items =
+      s.baselineExpenses && s.baselineExpenses.length > 0
+        ? s.baselineExpenses
+        : [
+            {
+              id: 'general',
+              label: 'General living',
+              category: 'other' as const,
+              annualAmountPresentDollars: s.annualExpenses,
+            },
+          ]
+    const annualExpenses = items.reduce((sum, it) => sum + it.annualAmountPresentDollars, 0)
+    return { ...s, baselineExpenses: items, annualExpenses }
+  })
 
 export type SimulationInputs = z.infer<typeof SimulationInputsSchema>
 
@@ -284,6 +340,9 @@ export function defaultInputs(): SimulationInputs {
     initialInflationMax: 0.04,
     breakpoints: [],
     annualExpenses: 70000,
+    baselineExpenses: [
+      { id: 'general', label: 'General living', category: 'other', annualAmountPresentDollars: 70000 },
+    ],
     socialSecurity: undefined,
     oneTimeExpenses: [],
     withdrawalStrategy: WithdrawalStrategy.TaxOptimal,

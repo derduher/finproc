@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { defaultInputs } from './schema'
 import { withRetirementAge } from './sim/retirementAge'
-import type { SimulationInputs, Person } from './schema'
+import { sumExpenseItems, scaleExpenseItems } from './sim/expenses'
+import type { SimulationInputs, Person, ExpenseItem } from './schema'
 
 export type DisplayMode = 'nominal' | 'real'
 export type Aesthetic = 'warm' | 'cool' | 'mono'
@@ -33,6 +34,11 @@ export interface Store {
   patchInputs: (patch: Partial<SimulationInputs>) => void
   /** Shallow-merge person fields */
   patchPerson: (patch: Partial<Person>) => void
+
+  /** Replace the itemized baseline expenses, keeping `annualExpenses` synced to the sum. */
+  setBaselineExpenses: (items: ExpenseItem[]) => void
+  /** Edit the aggregate spend; scales the breakdown proportionally to match. */
+  setExpensesTotal: (total: number) => void
 
   setActiveStep: (step: number) => void
   setDisplayMode: (mode: DisplayMode) => void
@@ -67,6 +73,15 @@ export const useStore = create<Store>((set) => ({
         return { inputs: withRetirementAge({ ...s.inputs, person }, patch.retirementAge) }
       }
       return { inputs: { ...s.inputs, person } }
+    }),
+
+  setBaselineExpenses: (items) =>
+    set((s) => ({ inputs: { ...s.inputs, baselineExpenses: items, annualExpenses: sumExpenseItems(items) } })),
+
+  setExpensesTotal: (total) =>
+    set((s) => {
+      const items = scaleExpenseItems(s.inputs.baselineExpenses, total)
+      return { inputs: { ...s.inputs, baselineExpenses: items, annualExpenses: sumExpenseItems(items) } }
     }),
 
   setActiveStep: (activeStep) => set((s) => ({ ui: { ...s.ui, activeStep } })),

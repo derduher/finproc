@@ -72,7 +72,7 @@ const numInput: React.CSSProperties = {
 export function CoreLevers() {
   const inputs = useStore((s) => s.inputs)
   const patchPerson = useStore((s) => s.patchPerson)
-  const patchInputs = useStore((s) => s.patchInputs)
+  const setExpensesTotal = useStore((s) => s.setExpensesTotal)
   const { person } = inputs
 
   return (
@@ -118,7 +118,7 @@ export function CoreLevers() {
         <MoneyInput
           aria-label="Target annual spend"
           value={inputs.annualExpenses}
-          onChange={(v) => patchInputs({ annualExpenses: v })}
+          onChange={(v) => setExpensesTotal(v)}
           step={1000}
           style={{ ...numInput, width: 90, fontSize: 16 }}
         />
