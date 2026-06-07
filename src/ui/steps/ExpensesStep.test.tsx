@@ -53,6 +53,49 @@ describe('ExpensesStep — baseline card', () => {
   })
 })
 
+describe('ExpensesStep — itemized baseline', () => {
+  beforeEach(() => {
+    useStore.setState({
+      inputs: {
+        ...useStore.getState().inputs,
+        baselineExpenses: [
+          { id: 'h', label: 'Housing', category: 'housing', annualAmountPresentDollars: 40_000 },
+          { id: 'f', label: 'Food', category: 'food', annualAmountPresentDollars: 30_000 },
+        ],
+        annualExpenses: 70_000,
+      },
+    })
+  })
+
+  it('renders a row per baseline expense item', () => {
+    const { container } = render(<ExpensesStep />)
+    expect(container.querySelectorAll('[data-expense-item]')).toHaveLength(2)
+    expect(screen.getByDisplayValue('Housing')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Food')).toBeInTheDocument()
+  })
+
+  it('adding an item appends a row and keeps the total synced', () => {
+    const { container } = render(<ExpensesStep />)
+    fireEvent.click(screen.getByRole('button', { name: /add expense/i }))
+    expect(container.querySelectorAll('[data-expense-item]')).toHaveLength(3)
+    expect(useStore.getState().inputs.annualExpenses).toBe(70_000) // new item is $0
+  })
+
+  it('editing an item amount re-derives the aggregate total', () => {
+    render(<ExpensesStep />)
+    const amounts = screen.getAllByLabelText('Expense amount')
+    fireEvent.change(amounts[0], { target: { value: '50000' } })
+    expect(useStore.getState().inputs.annualExpenses).toBe(80_000)
+  })
+
+  it('removing an item re-sums the remaining total', () => {
+    render(<ExpensesStep />)
+    fireEvent.click(screen.getAllByLabelText('Remove expense')[1])
+    expect(useStore.getState().inputs.baselineExpenses).toHaveLength(1)
+    expect(useStore.getState().inputs.annualExpenses).toBe(40_000)
+  })
+})
+
 describe('ExpensesStep — life timeline', () => {
   it('renders the life timeline SVG', () => {
     render(<ExpensesStep />)

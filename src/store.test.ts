@@ -38,6 +38,33 @@ describe('useStore — input mutations', () => {
     expect(result.current.inputs.person.currentAge).toBe(defaultInputs().person.currentAge)
   })
 
+  it('setBaselineExpenses keeps annualExpenses synced to the item sum', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => {
+      result.current.setBaselineExpenses([
+        { id: 'h', label: 'Housing', category: 'housing', annualAmountPresentDollars: 30_000 },
+        { id: 'f', label: 'Food', category: 'food', annualAmountPresentDollars: 15_000 },
+      ])
+    })
+    expect(result.current.inputs.baselineExpenses).toHaveLength(2)
+    expect(result.current.inputs.annualExpenses).toBe(45_000)
+  })
+
+  it('setExpensesTotal scales the breakdown proportionally and re-syncs the aggregate', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => {
+      result.current.setBaselineExpenses([
+        { id: 'a', label: 'A', category: 'other', annualAmountPresentDollars: 30_000 },
+        { id: 'b', label: 'B', category: 'other', annualAmountPresentDollars: 10_000 },
+      ])
+    })
+    act(() => {
+      result.current.setExpensesTotal(80_000)
+    })
+    expect(result.current.inputs.annualExpenses).toBe(80_000)
+    expect(result.current.inputs.baselineExpenses.map((i) => i.annualAmountPresentDollars)).toEqual([60_000, 20_000])
+  })
+
   it('patchPerson updates person while preserving other inputs', () => {
     const { result } = renderHook(() => useStore())
     act(() => {

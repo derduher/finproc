@@ -61,6 +61,9 @@ function makeInputs(overrides: Partial<SimulationInputs> = {}): SimulationInputs
       contributionEndAge: 62,
       withdrawalStartAge: 59,
     }],
+    baselineExpenses: [
+      { id: 'general', label: 'General living', category: 'other', annualAmountPresentDollars: 50_000 },
+    ],
     annualExpenses: 50_000,
     withdrawalStrategy: WithdrawalStrategy.TaxOptimal,
     ...overrides,

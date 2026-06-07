@@ -1,6 +1,7 @@
-import { Field, NumInput } from '../shared/Field'
 import { useStore } from '../../store'
-import type { OneTimeExpense, SocialSecurity } from '../../schema'
+import { createExpenseItem } from '../../sim/expenses'
+import { EXPENSE_CATEGORIES } from '../../schema'
+import type { OneTimeExpense, SocialSecurity, ExpenseItem } from '../../schema'
 
 interface TimelineMarker {
   age: number
@@ -235,9 +236,16 @@ function EventCard({
 export function ExpensesStep() {
   const inputs = useStore((s) => s.inputs)
   const patchInputs = useStore((s) => s.patchInputs)
+  const setBaselineExpenses = useStore((s) => s.setBaselineExpenses)
 
   const ss = inputs.socialSecurity
   const retireAge = inputs.person.retirementAge
+
+  const items = inputs.baselineExpenses
+  const updateItem = (id: string, patch: Partial<ExpenseItem>) =>
+    setBaselineExpenses(items.map((i) => (i.id === id ? { ...i, ...patch } : i)))
+  const removeItem = (id: string) => setBaselineExpenses(items.filter((i) => i.id !== id))
+  const addItem = () => setBaselineExpenses([...items, createExpenseItem({ label: 'New expense' })])
 
   const updateSS = (patch: Partial<SocialSecurity>) => {
     patchInputs({
@@ -284,37 +292,89 @@ export function ExpensesStep() {
         Baseline annual spending, plus one-time and recurring life events. All amounts in today's dollars.
       </p>
 
-      {/* Baseline 3-col card */}
-      <div
-        className="card"
-        style={{ padding: 16, display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 18 }}
-      >
-        <div>
-          <div className="label" style={{ marginBottom: 6 }}>baseline annual expenses</div>
+      {/* Baseline itemized card */}
+      <div className="card" style={{ padding: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+          <div className="label">baseline annual expenses · itemized</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            <span className="num" style={{ fontSize: 28, color: 'var(--ink)' }}>
+            <span className="num" style={{ fontSize: 24, color: 'var(--ink)' }}>
               ${inputs.annualExpenses.toLocaleString()}
             </span>
-            <span className="muted" style={{ fontSize: 13 }}>/ yr · today's $</span>
+            <span className="muted" style={{ fontSize: 12 }}>/ yr · today's $</span>
           </div>
-          <div style={{ marginTop: 8 }}>
-            <Field label="" hint="">
-              <NumInput
-                type="number"
-                min={0}
-                step={1000}
-                prefix="$"
-                value={inputs.annualExpenses}
-                aria-label="Annual baseline expenses"
-                onChange={(e) => patchInputs({ annualExpenses: Number(e.target.value) })}
-              />
-            </Field>
-          </div>
-          <div className="micro" style={{ marginTop: 4 }}>auto-inflated forward at prevailing rate</div>
         </div>
 
-        <div className="v-divider" />
+        <div data-expense-list style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {items.map((item) => (
+            <div
+              data-expense-item
+              key={item.id}
+              style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
+            >
+              <input
+                className="field"
+                aria-label="Expense name"
+                value={item.label}
+                onChange={(e) => updateItem(item.id, { label: e.target.value })}
+                style={{ flex: '1 1 160px', minWidth: 120 }}
+              />
+              <select
+                className="field"
+                aria-label="Expense category"
+                value={item.category}
+                onChange={(e) => updateItem(item.id, { category: e.target.value as ExpenseItem['category'] })}
+                style={{ flex: '0 0 auto', height: 32, textTransform: 'capitalize' }}
+              >
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>$</span>
+              <input
+                type="number"
+                className="field field-num"
+                aria-label="Expense amount"
+                min={0}
+                step={500}
+                value={item.annualAmountPresentDollars}
+                onChange={(e) => updateItem(item.id, { annualAmountPresentDollars: Number(e.target.value) })}
+                style={{ width: 110, height: 32 }}
+              />
+              <button
+                type="button"
+                aria-label="Remove expense"
+                onClick={() => removeItem(item.id)}
+                disabled={items.length <= 1}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: items.length <= 1 ? 'not-allowed' : 'pointer',
+                  color: 'var(--ink-3)',
+                  fontSize: 18,
+                  lineHeight: 1,
+                  padding: 4,
+                  opacity: items.length <= 1 ? 0.4 : 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
 
+        <button type="button" onClick={addItem} className="btn btn-sm btn-ghost" style={{ marginTop: 10 }}>
+          + add expense
+        </button>
+        <div className="micro" style={{ marginTop: 6 }}>auto-inflated forward at prevailing rate</div>
+      </div>
+
+      {/* Social Security + net need */}
+      <div
+        className="card"
+        style={{ marginTop: 16, padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}
+      >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <div className="label">social security</div>

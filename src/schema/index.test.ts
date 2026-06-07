@@ -254,6 +254,42 @@ describe('SimulationInputsSchema', () => {
   })
 })
 
+describe('SimulationInputsSchema — baseline expense itemization', () => {
+  it('migrates a legacy annualExpenses-only input into a single line item', () => {
+    const { baselineExpenses, ...legacy } = defaultInputs()
+    void baselineExpenses
+    const result = SimulationInputsSchema.safeParse({ ...legacy, annualExpenses: 64_000 })
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.data.baselineExpenses).toHaveLength(1)
+    expect(result.data.baselineExpenses[0].annualAmountPresentDollars).toBe(64_000)
+    expect(result.data.annualExpenses).toBe(64_000)
+  })
+
+  it('derives annualExpenses from the sum of baselineExpenses when itemized', () => {
+    const result = SimulationInputsSchema.safeParse({
+      ...defaultInputs(),
+      annualExpenses: 1, // stale aggregate — should be overwritten by the sum
+      baselineExpenses: [
+        { id: 'h', label: 'Housing', category: 'housing', annualAmountPresentDollars: 30_000 },
+        { id: 'f', label: 'Food', category: 'food', annualAmountPresentDollars: 12_000 },
+      ],
+    })
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.data.annualExpenses).toBe(42_000)
+    expect(result.data.baselineExpenses).toHaveLength(2)
+  })
+
+  it('rejects an invalid expense category', () => {
+    const result = SimulationInputsSchema.safeParse({
+      ...defaultInputs(),
+      baselineExpenses: [{ id: 'x', label: 'Mystery', category: 'spaceship', annualAmountPresentDollars: 1_000 }],
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
 describe('defaultInputs', () => {
   it('returns a valid SimulationInputs', () => {
     const inputs = defaultInputs()

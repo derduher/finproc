@@ -13,6 +13,9 @@ describe('urlState — round-trip', () => {
   it('round-trips with non-default values', () => {
     const inp = {
       ...defaultInputs(),
+      baselineExpenses: [
+        { id: 'general', label: 'General living', category: 'other' as const, annualAmountPresentDollars: 55000 },
+      ],
       annualExpenses: 55000,
       person: { ...defaultInputs().person, currentAge: 45, maxAge: 90 },
     }

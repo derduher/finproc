@@ -50,6 +50,9 @@ export function buildFirstRunInputs(a: {
       },
     ],
     annualExpenses: a.targetSpend,
+    baselineExpenses: [
+      { id: 'general', label: 'General living', category: 'other', annualAmountPresentDollars: a.targetSpend },
+    ],
     socialSecurity: { annualAmountPresentDollars: 30_000, claimAge: 67 },
     withdrawalStrategy: WithdrawalStrategy.TaxOptimal,
     spendingPolicy: 'flat',
