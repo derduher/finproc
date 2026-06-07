@@ -23,6 +23,7 @@ import { GuardrailTimeline } from '../charts/GuardrailTimeline'
 import { AdvancedDrawer } from './AdvancedDrawer'
 import { MethodologyDrawer } from './MethodologyDrawer'
 import { DisclaimerBanner } from './DisclaimerBanner'
+import { PathStories } from './PathStories'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
 /** Sample path whose ending balance is closest to the median — a representative run. */
@@ -166,6 +167,15 @@ export function MainScreen() {
                   <div className="v2-outcome-grid">
                     <RiskRead reads={reads} />
                     <SurplusRead reads={reads} />
+                  </div>
+
+                  {/* year-by-year path narratives */}
+                  <div style={{ marginTop: 18 }}>
+                    <PathStories
+                      result={result}
+                      currentAge={inputs.person.currentAge}
+                      retireAge={inputs.person.retirementAge}
+                    />
                   </div>
 
                   {/* demoted success + assumptions */}
