@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { PathsChart, summarizeColumn } from './PathsChart'
+import { PathsChart, summarizeColumn, pathYearDetail } from './PathsChart'
 import type { SamplePath } from '../../sim/montecarlo'
 
 const paths: SamplePath[] = [
@@ -119,5 +119,53 @@ describe('summarizeColumn (#4 hover readout)', () => {
     const s = summarizeColumn(series, median, paths, ages, 99)
     expect(Number.isFinite(s.median)).toBe(true)
     expect(Number.isFinite(s.lo)).toBe(true)
+  })
+})
+
+describe('pathYearDetail (year-by-year hover)', () => {
+  const path: SamplePath = {
+    balances: [120, 90, 60],
+    depleteAge: undefined,
+    cutYears: [67],
+    raiseYears: [],
+    returns: [0.05, -0.2, 0.1],
+    inflation: [0.02, 0.04, 0.03],
+  }
+  // returns[i] is the year ending at age currentAge + i + 1 (currentAge = 65).
+
+  it('reads the drivers for the year ending at the hovered age', () => {
+    const d = pathYearDetail(path, 67, 65) // idx 1 → the -20% year
+    expect(d.balance).toBe(90)
+    expect(d.stockReturn).toBeCloseTo(-0.2)
+    expect(d.inflation).toBeCloseTo(0.04)
+    expect(d.cut).toBe(true)
+    expect(d.raise).toBe(false)
+  })
+
+  it('returns undefined drivers outside the path range', () => {
+    const d = pathYearDetail(path, 65, 65) // the prepended start age, no year yet
+    expect(d.balance).toBeUndefined()
+    expect(d.stockReturn).toBeUndefined()
+  })
+
+  it('tolerates a path with no rate detail (legacy cached results)', () => {
+    const bare: SamplePath = { balances: [120, 90], depleteAge: undefined, cutYears: [], raiseYears: [] }
+    const d = pathYearDetail(bare, 66, 65)
+    expect(d.balance).toBe(120)
+    expect(d.stockReturn).toBeUndefined()
+  })
+})
+
+describe('PathsChart crisis overlay', () => {
+  it('draws an overlay line and a legend entry when given one', () => {
+    const { container } = renderChart({
+      overlay: { label: 'if 2008 repeated', balances: [100, 70, 75, 80], tone: 'accent' },
+    })
+    expect(screen.getByText('if 2008 repeated')).toBeInTheDocument()
+    // The overlay path uses the accent stroke.
+    const accentPaths = Array.from(container.querySelectorAll('path')).filter((p) =>
+      (p.getAttribute('stroke') || '').includes('--accent'),
+    )
+    expect(accentPaths.length).toBeGreaterThan(0)
   })
 })

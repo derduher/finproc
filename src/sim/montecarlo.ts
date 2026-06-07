@@ -340,7 +340,7 @@ export function buildRateSchedule(
  * by the age they take effect. The initial segment applies from `currentAge`;
  * each breakpoint supersedes earlier ones from its `startAge` onward.
  */
-function buildSegments(inputs: SimulationInputs): RateSegment[] {
+export function buildSegments(inputs: SimulationInputs): RateSegment[] {
   const initial: RateSegment = {
     startAge: inputs.person.currentAge,
     growthMean: p10p90ToMean(inputs.initialStockGrowthMin, inputs.initialStockGrowthMax),
@@ -359,7 +359,7 @@ function buildSegments(inputs: SimulationInputs): RateSegment[] {
 }
 
 /** The segment active at `age`: the latest one whose `startAge ≤ age`. */
-function activeSegment(segments: RateSegment[], age: number): RateSegment {
+export function activeSegment(segments: RateSegment[], age: number): RateSegment {
   let active = segments[0]
   for (const s of segments) {
     if (s.startAge <= age) active = s

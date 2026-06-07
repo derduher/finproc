@@ -58,6 +58,51 @@ export function summarizeColumn(
   return { age, median: medianSeries[i] ?? 0, lo: q(0.1), hi: q(0.9), depleted, total: samplePaths.length }
 }
 
+/** One sampled path's drivers for the year ending at a hovered age. */
+export interface PathYearDetail {
+  age: number
+  /** Year-end balance, or undefined for the prepended start age / out of range. */
+  balance: number | undefined
+  /** That year's nominal stock return, if rate detail is present. */
+  stockReturn: number | undefined
+  /** That year's inflation, if rate detail is present. */
+  inflation: number | undefined
+  cut: boolean
+  raise: boolean
+}
+
+/**
+ * Read one path's year-by-year drivers at the hovered age — the per-year detail
+ * the narrative describes in words, surfaced on the chart. `returns[i]` is the
+ * year ending at age `currentAge + i + 1`, so the index is `age - currentAge - 1`.
+ * Pure + range-guarded; tolerates legacy paths that lack `returns`/`inflation`.
+ */
+export function pathYearDetail(
+  path: Pick<SamplePath, 'balances' | 'returns' | 'inflation' | 'cutYears' | 'raiseYears'>,
+  age: number,
+  currentAge: number,
+): PathYearDetail {
+  const idx = age - currentAge - 1
+  const at = (arr: number[] | undefined): number | undefined =>
+    arr && idx >= 0 && idx < arr.length ? arr[idx] : undefined
+  return {
+    age,
+    balance: at(path.balances),
+    stockReturn: at(path.returns),
+    inflation: at(path.inflation),
+    cut: path.cutYears.includes(age),
+    raise: path.raiseYears.includes(age),
+  }
+}
+
+/** A deterministic line drawn bold over the probabilistic paths (e.g. a crisis replay). */
+export interface PathsChartOverlay {
+  label: string
+  /** Year-end balances aligned to ages currentAge+1 … (same shape as a sample path). */
+  balances: number[]
+  tone?: 'bad' | 'accent'
+}
+
 export interface PathsChartProps {
   /** Individual run trajectories (balance per year-end). */
   samplePaths: SamplePath[]
@@ -71,6 +116,8 @@ export interface PathsChartProps {
   ssAge?: number
   /** One-time expenditure markers. */
   expenses?: PathExpenseMarker[]
+  /** A deterministic line drawn bold over the paths (e.g. a historical crisis replay). */
+  overlay?: PathsChartOverlay
   /** Legend caption override (e.g. "~99% of 1,000 runs hold your $80K target"). */
   holdLabel?: string
   width?: number
@@ -93,6 +140,7 @@ export function PathsChart({
   startBalance,
   ssAge,
   expenses = [],
+  overlay,
   holdLabel,
   width = 1000,
   height = 360,
@@ -253,6 +301,22 @@ export function PathsChart({
         </g>
       )}
 
+      {/* crisis overlay — a single deterministic replay drawn bold over the paths */}
+      {overlay && overlay.balances.length > 0 && (() => {
+        const color = overlay.tone === 'bad' ? 'var(--bad)' : 'var(--accent)'
+        return (
+          <path
+            d={linePath(seriesOf(overlay.balances))}
+            fill="none"
+            stroke={color}
+            strokeWidth="2.8"
+            strokeDasharray="6 3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )
+      })()}
+
       {/* retire marker. When the bar is in the left portion of the chart its top
           label would collide with the top-left legend, so drop it to the bottom. */}
       {showRetire && (() => {
@@ -312,6 +376,12 @@ export function PathsChart({
             {holdLabel ||
               `${samplePaths.length} of runs shown · ${depleteCount > 0 ? `${Math.round((depleteCount / samplePaths.length) * 100)}% run short` : 'all hold'}`}
           </text>
+          {overlay && (
+            <>
+              <line x1="0" y1="24" x2="18" y2="24" stroke={overlay.tone === 'bad' ? 'var(--bad)' : 'var(--accent)'} strokeWidth="2.8" strokeDasharray="6 3" />
+              <text x="24" y="28" fontFamily="var(--font-body)" fontSize="11" fill="var(--ink-2)">{overlay.label}</text>
+            </>
+          )}
         </g>
       )}
 
@@ -320,8 +390,33 @@ export function PathsChart({
         const sum = summarizeColumn(pathSeries, medianSeries, samplePaths, ages, hoverIdx)
         const hx = x(ages[hoverIdx])
         const my = y(sum.median)
-        const boxW = 172
-        const boxH = sum.depleted > 0 ? 80 : 64
+        // The highlighted bad-luck path's own drivers that year — ties the
+        // "what happened, year by year" words to the picture on hover.
+        const detail = badPath ? pathYearDetail(badPath, sum.age, currentAge) : undefined
+        const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`
+        const showDrivers = detail?.stockReturn !== undefined
+        const boxW = 184
+        // Build the tooltip rows declaratively, then lay them out — no render-time
+        // mutation (keeps the React Compiler happy).
+        const rows: { text: string; fill: string; mono?: boolean }[] = [
+          { text: `age ${sum.age}`, fill: 'var(--ink-3)' },
+          { text: `median ${formatMoneyAbbreviated(sum.median)}`, fill: 'var(--ink)', mono: true },
+          { text: `most land ${formatMoneyAbbreviated(sum.lo)}–${formatMoneyAbbreviated(sum.hi)}`, fill: 'var(--ink-3)' },
+        ]
+        if (sum.depleted > 0) rows.push({ text: `${sum.depleted} of ${sum.total} run short by here`, fill: 'var(--bad)' })
+        if (showDrivers) {
+          rows.push({ text: `bad-luck path: ${pct(detail!.stockReturn!)} market · ${pct(detail!.inflation ?? 0)} inflation`, fill: 'var(--bad)' })
+          if (detail?.balance !== undefined) rows.push({ text: `its balance ${formatMoneyAbbreviated(detail.balance)}`, fill: 'var(--ink-3)', mono: true })
+        }
+        if (detail?.cut || detail?.raise) rows.push({ text: detail?.cut ? 'spending trimmed this year' : 'spending raised this year', fill: 'var(--ink-3)' })
+        // Row baselines, cumulative from the box top.
+        const rowH = (r: { mono?: boolean }) => (r.mono ? 19 : 16)
+        const baselines = rows.reduce<number[]>((acc, _r, i) => {
+          const prev = i === 0 ? 19 : acc[i - 1] + rowH(rows[i - 1])
+          acc.push(prev)
+          return acc
+        }, [])
+        const boxH = (baselines[baselines.length - 1] ?? 19) + 8
         const bx = Math.min(Math.max(hx + 12, pad.l), pad.l + cw - boxW)
         const by = pad.t + 8
         return (
@@ -329,12 +424,9 @@ export function PathsChart({
             <line x1={hx} y1={pad.t} x2={hx} y2={pad.t + ch} stroke="var(--ink-2)" strokeWidth="1" strokeDasharray="2 3" />
             <circle cx={hx} cy={my} r="3.5" fill="var(--chart-line)" stroke="var(--bg)" strokeWidth="1" />
             <rect x={bx} y={by} width={boxW} height={boxH} rx="7" fill="var(--bg-elev)" stroke="var(--line)" strokeWidth="1" />
-            <text x={bx + 12} y={by + 19} fontFamily="var(--font-body)" fontSize="11" fill="var(--ink-3)">age {sum.age}</text>
-            <text x={bx + 12} y={by + 38} fontFamily="var(--font-mono)" fontSize="13" fill="var(--ink)">median {formatMoneyAbbreviated(sum.median)}</text>
-            <text x={bx + 12} y={by + 54} fontFamily="var(--font-body)" fontSize="11" fill="var(--ink-3)">most land {formatMoneyAbbreviated(sum.lo)}–{formatMoneyAbbreviated(sum.hi)}</text>
-            {sum.depleted > 0 && (
-              <text x={bx + 12} y={by + 71} fontFamily="var(--font-body)" fontSize="11" fill="var(--bad)">{sum.depleted} of {sum.total} run short by here</text>
-            )}
+            {rows.map((r, i) => (
+              <text key={i} x={bx + 12} y={by + baselines[i]} fontFamily={r.mono ? 'var(--font-mono)' : 'var(--font-body)'} fontSize={r.mono ? 13 : 11} fill={r.fill}>{r.text}</text>
+            ))}
           </g>
         )
       })()}
