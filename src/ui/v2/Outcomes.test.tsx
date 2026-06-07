@@ -4,7 +4,7 @@ import { SustainableHero, RiskRead, SurplusRead, HoldChip } from './Outcomes'
 import { deriveOutcomeReads } from '../../sim/outcome'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
-function reads(opts: { sustainable: number; target: number; worst10?: number; rare?: number; success?: number }) {
+function reads(opts: { sustainable: number; target: number; worst10?: number; rare?: number; success?: number; retireAge?: number; maxAge?: number }) {
   const result: MonteCarloResult = {
     yearlyResults: [],
     successRate: opts.success ?? 0.99,
@@ -18,7 +18,13 @@ function reads(opts: { sustainable: number; target: number; worst10?: number; ra
       { fraction: 0.1, age: opts.worst10 },
     ],
   }
-  return deriveOutcomeReads({ result, sustainable: opts.sustainable, target: opts.target, maxAge: 95 })
+  return deriveOutcomeReads({
+    result,
+    sustainable: opts.sustainable,
+    target: opts.target,
+    maxAge: opts.maxAge ?? 95,
+    retireAge: opts.retireAge ?? 65,
+  })
 }
 
 describe('SustainableHero', () => {
@@ -30,6 +36,17 @@ describe('SustainableHero', () => {
   it('frames an under-funded plan as over the sustainable level', () => {
     render(<SustainableHero reads={reads({ sustainable: 60_000, target: 80_000 })} />)
     expect(screen.getByText(/sustainable at 90%/i)).toBeInTheDocument()
+  })
+
+  it('scopes the figure to retirement with the covered age range', () => {
+    render(<SustainableHero reads={reads({ sustainable: 90_000, target: 80_000, retireAge: 65, maxAge: 95 })} />)
+    expect(screen.getByText(/in retirement/i)).toBeInTheDocument()
+    expect(screen.getByText(/from age 65 to 95/i)).toBeInTheDocument()
+  })
+
+  it('explains what "sustain" means in plain terms', () => {
+    render(<SustainableHero reads={reads({ sustainable: 90_000, target: 80_000 })} />)
+    expect(screen.getByText(/9 in 10/i)).toBeInTheDocument()
   })
 })
 

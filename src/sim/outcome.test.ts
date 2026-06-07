@@ -51,4 +51,9 @@ describe('deriveOutcomeReads', () => {
     expect(o.legacyP90).toBe(13_300_000)
     expect(o.holdRate).toBe(0.97)
   })
+
+  it('carries the retirement age so the read can be time-scoped', () => {
+    const o = deriveOutcomeReads({ result: makeResult(), sustainable: 103_000, target: 80_000, maxAge: 95, retireAge: 67 })
+    expect(o.retireAge).toBe(67)
+  })
 })

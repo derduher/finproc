@@ -76,6 +76,7 @@ export function MainScreen() {
                 sustainable: spend ?? target,
                 target,
                 maxAge: inputs.person.maxAge,
+                retireAge: inputs.person.retirementAge,
               })
               const median = result.yearlyResults.map((y) => y.p50)
               const expenses: PathExpenseMarker[] = inputs.oneTimeExpenses.map((e) => ({
@@ -91,7 +92,7 @@ export function MainScreen() {
                   <div className="v2-hero-grid">
                     {spend == null ? (
                       <div>
-                        <div className="label" style={{ marginBottom: 8 }}>spending you can sustain</div>
+                        <div className="label" style={{ marginBottom: 8 }}>yearly spending you can sustain in retirement</div>
                         <div className="hero-spend" style={{ fontSize: 76, color: 'var(--ink-3)' }}>…</div>
                         <div className="micro" style={{ marginTop: 8 }}>solving for your sustainable spend…</div>
                       </div>
