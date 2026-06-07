@@ -12,14 +12,15 @@ import { LegacyBar } from '../charts/LegacyBar'
 export function SustainableHero({ reads, size = 76 }: { reads: OutcomeReads; size?: number }) {
   return (
     <div>
-      <div className="label" style={{ marginBottom: 8 }}>spending you can sustain</div>
+      <div className="label" style={{ marginBottom: 8 }}>yearly spending you can sustain in retirement</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
         <span className="hero-spend" style={{ fontSize: size }}>{fmt(reads.sustainable)}</span>
         <span style={{ fontSize: 20, color: 'var(--ink-3)' }}>/ year</span>
       </div>
       <div style={{ fontSize: 14, color: 'var(--ink-2)', marginTop: 8, maxWidth: 460, lineHeight: 1.5 }}>
-        In today's dollars, with a <b style={{ fontWeight: 500, color: 'var(--ink)' }}>90% safety margin</b> — the spend level
-        where nearly all futures keep money to age {reads.maxAge}.
+        From age {reads.retireAge} to {reads.maxAge}, in today's dollars. This is the most you could spend each year while{' '}
+        <b style={{ fontWeight: 500, color: 'var(--ink)' }}>9 in 10</b> possible futures still have money left at age {reads.maxAge}
+        {' '}— a <b style={{ fontWeight: 500, color: 'var(--ink)' }}>90% safety margin</b>.
       </div>
       {reads.isOverSaver ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, padding: '10px 14px', background: 'var(--good-soft)', borderRadius: 8, maxWidth: 460 }}>

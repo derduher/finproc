@@ -30,6 +30,8 @@ export interface OutcomeReads {
   worstShortfallAge: number | undefined
   /** Age the worst 1-in-100 runs run short (undefined if even they stay funded). */
   rareShortfallAge: number | undefined
+  /** Age the sustainable-spend figure starts applying (retirement). */
+  retireAge: number
   maxAge: number
 }
 
@@ -38,8 +40,9 @@ export function deriveOutcomeReads(args: {
   sustainable: number
   target: number
   maxAge: number
+  retireAge: number
 }): OutcomeReads {
-  const { result, sustainable, target, maxAge } = args
+  const { result, sustainable, target, maxAge, retireAge } = args
   const shortfallAt = (q: number): number | undefined =>
     result.shortfallByPercentile.find((s) => s.fraction === q)?.age
 
@@ -55,6 +58,7 @@ export function deriveOutcomeReads(args: {
     legacyP90: result.p90EndBalance,
     worstShortfallAge: shortfallAt(0.1),
     rareShortfallAge: shortfallAt(0.01),
+    retireAge,
     maxAge,
   }
 }
