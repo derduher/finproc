@@ -27,7 +27,8 @@ describe('runSingleProjection — zero growth, no withdrawals', () => {
           withdrawalStartAge: 59,
         }],
         annualExpenses: 0,
-        person: { ...defaultInputs().person, currentAge: 32, maxAge: 62 },
+        // Salary 0: isolate contributions from surplus take-home banking.
+        person: { ...defaultInputs().person, currentAge: 32, maxAge: 62, annualSalary: 0 },
       }),
       ZERO_RATES,
     )
@@ -56,7 +57,8 @@ describe('runSingleProjection — zero growth, no withdrawals', () => {
           withdrawalStartAge: 59,
         }],
         annualExpenses: 0,
-        person: { ...defaultInputs().person, currentAge: 32, maxAge: 62 },
+        // Salary 0: isolate contributions from surplus take-home banking.
+        person: { ...defaultInputs().person, currentAge: 32, maxAge: 62, annualSalary: 0 },
       }),
       { stockGrowth: annualRate, inflation: 0 },
     )
@@ -241,7 +243,7 @@ describe('runSingleProjection — one-time expenses', () => {
   it('one-time expense at age 50 reduces balance in that year', () => {
     const withExpense = runSingleProjection(
       inputs({
-        person: { ...defaultInputs().person, currentAge: 48, maxAge: 52 },
+        person: { ...defaultInputs().person, currentAge: 48, maxAge: 52, retirementAge: 48 },
         accounts: [{ id: 'a', name: 'Trad', type: 'traditional', balance: 300000, contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly', contributionEndAge: 47, withdrawalStartAge: 48 }],
         annualExpenses: 0,
         oneTimeExpenses: [{ id: 'e1', label: 'House', age: 50, amountPresentDollars: 50000 }],
@@ -251,7 +253,7 @@ describe('runSingleProjection — one-time expenses', () => {
 
     const withoutExpense = runSingleProjection(
       inputs({
-        person: { ...defaultInputs().person, currentAge: 48, maxAge: 52 },
+        person: { ...defaultInputs().person, currentAge: 48, maxAge: 52, retirementAge: 48 },
         accounts: [{ id: 'a', name: 'Trad', type: 'traditional', balance: 300000, contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly', contributionEndAge: 47, withdrawalStartAge: 48 }],
         annualExpenses: 0,
       }),
@@ -291,12 +293,12 @@ describe('runSingleProjection — pre-retirement salary covers expenses', () => 
     expect(result.yearlyResults.at(-1)!.totalBalance).toBeGreaterThan(800000) // grew
   })
 
-  it('salary stops applying after effective retirement age', () => {
-    // contributionEndAge = 45 means effective retirement = 45.
-    // From 45 onward, salary is gone and the small Roth must cover huge expenses → deplete.
+  it('salary stops applying after retirement age', () => {
+    // retirementAge = 45: from 45 onward, salary is gone and the small Roth must
+    // cover huge expenses → deplete.
     const result = runSingleProjection(
       inputs({
-        person: { ...defaultInputs().person, currentAge: 32, maxAge: 70, annualSalary: 95000, marginalTaxRate: 0.24 },
+        person: { ...defaultInputs().person, currentAge: 32, maxAge: 70, retirementAge: 45, annualSalary: 95000, marginalTaxRate: 0.24 },
         accounts: [{
           id: 'a', name: 'Roth', type: 'roth',
           balance: 50000, // tiny
@@ -313,6 +315,345 @@ describe('runSingleProjection — pre-retirement salary covers expenses', () => 
     expect(result.succeeded).toBe(false)
     expect(result.depleteAge).toBeDefined()
     expect(result.depleteAge!).toBeGreaterThanOrEqual(45) // after retirement, not before
+  })
+})
+
+describe('runSingleProjection — per-account stock/bond allocation', () => {
+  const growthOnly = (stockAllocation: number | undefined) =>
+    inputs({
+      person: { ...defaultInputs().person, currentAge: 60, maxAge: 61, retirementAge: 60, annualSalary: 0 },
+      accounts: [{
+        id: 'a', name: 'Mixed', type: 'roth',
+        balance: 100000,
+        contributionAmount: 0,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+        contributionEndAge: 60,
+        withdrawalStartAge: 60,
+        ...(stockAllocation !== undefined ? { stockAllocation } : null),
+      }],
+      annualExpenses: 0,
+    })
+
+  it('a 50/50 account grows at the blend of stock and bond rates', () => {
+    const result = runSingleProjection(growthOnly(0.5), {
+      stockGrowth: 0.10,
+      inflation: 0,
+      bondGrowth: 0.02,
+    })
+    const blendMonthly =
+      0.5 * (Math.pow(1.10, 1 / 12) - 1) + 0.5 * (Math.pow(1.02, 1 / 12) - 1)
+    const expected = 100000 * Math.pow(1 + blendMonthly, 12)
+    expect(result.yearlyResults[0]!.totalBalance).toBeCloseTo(expected, 0)
+  })
+
+  it('an all-bond account grows at the bond rate', () => {
+    const result = runSingleProjection(growthOnly(0), {
+      stockGrowth: 0.10,
+      inflation: 0,
+      bondGrowth: 0.02,
+    })
+    expect(result.yearlyResults[0]!.totalBalance).toBeCloseTo(100000 * 1.02, 0)
+  })
+
+  it('omitted allocation defaults to 100% stocks (back-compat)', () => {
+    const result = runSingleProjection(growthOnly(undefined), {
+      stockGrowth: 0.10,
+      inflation: 0,
+      bondGrowth: 0.02,
+    })
+    expect(result.yearlyResults[0]!.totalBalance).toBeCloseTo(100000 * 1.10, 0)
+  })
+
+  it('a missing bondGrowth in the rates falls back to the stock rate', () => {
+    const result = runSingleProjection(growthOnly(0.5), { stockGrowth: 0.10, inflation: 0 })
+    expect(result.yearlyResults[0]!.totalBalance).toBeCloseTo(100000 * 1.10, 0)
+  })
+})
+
+describe('runSingleProjection — RMD start age by birth cohort (SECURE 2.0)', () => {
+  it('born-1960+ cohorts start RMDs at 75, not 73', () => {
+    // currentAge 60 → born well after 1960 (assumed sim start 2026): the
+    // traditional balance must stay untouched through the year starting at 74
+    // and shrink only once the year starting at 75 forces a distribution.
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 78, retirementAge: 60, annualSalary: 0 },
+        accounts: [{
+          id: 'trad', name: 'Trad', type: 'traditional',
+          balance: 1_000_000,
+          contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+          contributionEndAge: 60, withdrawalStartAge: 60,
+        }],
+        annualExpenses: 0,
+      }),
+      ZERO_RATES,
+    )
+    const tradAt = (age: number) =>
+      result.yearlyResults.find((r) => r.age === age)!.accountBalances['trad']
+    expect(tradAt(74)).toBeCloseTo(1_000_000, -1) // year starting 73: no RMD yet
+    expect(tradAt(75)).toBeCloseTo(1_000_000, -1) // year starting 74: still none
+    expect(tradAt(76)).toBeLessThan(1_000_000 - 1) // year starting 75: forced out
+  })
+})
+
+describe('runSingleProjection — SS thresholds are fixed nominal', () => {
+  it('under inflation, a constant real spend needs growing real withdrawals as more SS becomes taxable', () => {
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 65, maxAge: 72, retirementAge: 65, annualSalary: 0 },
+        accounts: [{
+          id: 'trad', name: 'Trad', type: 'traditional',
+          balance: 2_000_000,
+          contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+          contributionEndAge: 65, withdrawalStartAge: 60,
+        }],
+        annualExpenses: 60_000,
+        socialSecurity: { claimAge: 65, annualAmountPresentDollars: 30_000 },
+      }),
+      { stockGrowth: 0, inflation: 0.08 },
+    )
+    const realWithdrawal = (i: number) =>
+      result.yearlyResults[i]!.withdrawals / Math.pow(1.08, i)
+    // Brackets are real-indexed but the SS bases are not, so the real gross need
+    // creeps upward year over year.
+    expect(realWithdrawal(6)).toBeGreaterThan(realWithdrawal(0) * 1.01)
+  })
+})
+
+describe('runSingleProjection — early-withdrawal penalty (10% before 59½)', () => {
+  const earlyRetiree = (currentAge: number, accountType: 'traditional' | 'roth') =>
+    inputs({
+      person: { ...defaultInputs().person, currentAge, maxAge: currentAge + 2, retirementAge: currentAge, annualSalary: 0 },
+      accounts: [{
+        id: 'a', name: 'Acct', type: accountType,
+        balance: 500000,
+        contributionAmount: 0,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+        contributionEndAge: currentAge,
+        withdrawalStartAge: 50,
+      }],
+      annualExpenses: 40000,
+    })
+
+  /** Gross g solving g − tax(g) − penaltyRate·g = net (single filer, no stacking). */
+  function solveGross(net: number, penaltyRate: number): number {
+    let lo = net
+    let hi = net * 3
+    for (let i = 0; i < 80; i++) {
+      const mid = (lo + hi) / 2
+      if (mid - ordinaryTax(mid, 'single') - penaltyRate * mid < net) lo = mid
+      else hi = mid
+    }
+    return (lo + hi) / 2
+  }
+
+  it('traditional withdrawals before 60 pay the extra 10%', () => {
+    const result = runSingleProjection(earlyRetiree(55, 'traditional'), ZERO_RATES)
+    const drawn = 500000 - result.yearlyResults[0]!.totalBalance
+    expect(drawn).toBeCloseTo(solveGross(40000, 0.1), 0)
+    expect(drawn).toBeGreaterThan(grossUpOrdinary(40000, 0, 'single'))
+  })
+
+  it('traditional withdrawals at 60+ pay no penalty', () => {
+    const result = runSingleProjection(earlyRetiree(60, 'traditional'), ZERO_RATES)
+    const drawn = 500000 - result.yearlyResults[0]!.totalBalance
+    expect(drawn).toBeCloseTo(grossUpOrdinary(40000, 0, 'single'), 0)
+  })
+
+  it('roth withdrawals are penalty-free (basis-first simplification)', () => {
+    const result = runSingleProjection(earlyRetiree(55, 'roth'), ZERO_RATES)
+    const drawn = 500000 - result.yearlyResults[0]!.totalBalance
+    expect(drawn).toBeCloseTo(40000, 0)
+  })
+})
+
+describe('runSingleProjection — working-year taxes are progressive + FICA', () => {
+  it('take-home = salary − progressive federal tax − 7.65% FICA (not flat marginal × salary)', () => {
+    // $100k single filer, no contributions, no expenses → year-1 banked surplus
+    // is exactly the take-home: 100000 − ordinaryTax(100000) − 7650.
+    // The old flat model (0.24 × 100000) gave 76000 instead.
+    const salary = 100000
+    const expected = salary - ordinaryTax(salary, 'single') - 0.0765 * salary
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 40, maxAge: 45, retirementAge: 41, annualSalary: salary, salaryGrowthRate: 0, marginalTaxRate: 0.24 },
+        accounts: [{
+          id: 'tax', name: 'Brokerage', type: 'taxable',
+          balance: 0, costBasis: 0,
+          contributionAmount: 0,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 41,
+          withdrawalStartAge: 41,
+        }],
+        annualExpenses: 0,
+      }),
+      ZERO_RATES,
+    )
+    expect(result.yearlyResults[0]!.totalBalance).toBeCloseTo(expected, 0)
+  })
+
+  it('pre-tax (traditional) contributions reduce taxable income; FICA still applies to gross', () => {
+    const salary = 100000
+    const preTax = 10000
+    const expectedSurplus =
+      salary - preTax - ordinaryTax(salary - preTax, 'single') - 0.0765 * salary
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 40, maxAge: 45, retirementAge: 41, annualSalary: salary, salaryGrowthRate: 0 },
+        accounts: [{
+          id: 'trad', name: '401k', type: 'traditional',
+          balance: 0,
+          contributionAmount: 0.10, // 10% of salary, pre-tax
+          contributionType: 'percent',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 41,
+          withdrawalStartAge: 60,
+        }],
+        annualExpenses: 0,
+      }),
+      ZERO_RATES,
+    )
+    // Year-1 portfolio = the traditional contribution + banked surplus.
+    expect(result.yearlyResults[0]!.totalBalance).toBeCloseTo(preTax + expectedSurplus, 0)
+  })
+
+  it('married filing status uses the wider married brackets (bigger take-home)', () => {
+    const base = {
+      person: { ...defaultInputs().person, currentAge: 40, maxAge: 42, retirementAge: 41, annualSalary: 150000, salaryGrowthRate: 0 },
+      accounts: [],
+      annualExpenses: 0,
+    }
+    const single = runSingleProjection(
+      inputs({ ...base, person: { ...base.person, filingStatus: 'single' as const } }),
+      ZERO_RATES,
+    )
+    const married = runSingleProjection(
+      inputs({ ...base, person: { ...base.person, filingStatus: 'married' as const } }),
+      ZERO_RATES,
+    )
+    expect(married.yearlyResults[0]!.totalBalance).toBeGreaterThan(
+      single.yearlyResults[0]!.totalBalance,
+    )
+  })
+})
+
+describe('runSingleProjection — surplus take-home is saved, not discarded', () => {
+  it('banks unspent salary into the taxable account during working years', () => {
+    // $100k salary, $30k expenses: take-home comfortably exceeds spending, and
+    // the difference must accumulate rather than evaporate. Exact take-home
+    // depends on the working-year tax model, so assert a generous band.
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 40, maxAge: 50, retirementAge: 45, annualSalary: 100000, salaryGrowthRate: 0 },
+        accounts: [{
+          id: 'tax', name: 'Brokerage', type: 'taxable',
+          balance: 0, costBasis: 0,
+          contributionAmount: 0,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 45,
+          withdrawalStartAge: 45,
+        }],
+        annualExpenses: 30000,
+      }),
+      ZERO_RATES,
+    )
+    const yr1 = result.yearlyResults[0]!
+    expect(yr1.totalBalance).toBeGreaterThan(30000)
+    expect(yr1.totalBalance).toBeLessThan(60000)
+    // The banked surplus is reported as savings in the cashflow series.
+    expect(yr1.contributions).toBeCloseTo(yr1.totalBalance, 0)
+    // Five working years accumulate ~5× the annual surplus.
+    const yr5 = result.yearlyResults[4]!
+    expect(yr5.totalBalance).toBeGreaterThan(yr1.totalBalance * 4.5)
+  })
+
+  it('creates a savings account lazily when no taxable account exists', () => {
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 40, maxAge: 46, retirementAge: 45, annualSalary: 100000, salaryGrowthRate: 0 },
+        accounts: [],
+        annualExpenses: 30000,
+      }),
+      ZERO_RATES,
+    )
+    expect(result.yearlyResults[0]!.totalBalance).toBeGreaterThan(30000)
+  })
+})
+
+describe('runSingleProjection — person.retirementAge is the single retirement definition', () => {
+  it('salary stops at retirementAge even when an account claims contributions until later', () => {
+    // retirementAge 62, but the account says contributionEndAge 70. Salary must
+    // stop at 62; the tiny portfolio then can't cover expenses → early depletion.
+    // (The old proxy — salary until max(contributionEndAge) — would carry the
+    // paycheck to 70 and deplete only around 71.)
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 75, retirementAge: 62, annualSalary: 200000 },
+        accounts: [{
+          id: 'a', name: 'Roth', type: 'roth',
+          balance: 10000,
+          contributionAmount: 0,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 70,
+          withdrawalStartAge: 60,
+        }],
+        annualExpenses: 100000,
+      }),
+      ZERO_RATES,
+    )
+    expect(result.succeeded).toBe(false)
+    expect(result.depleteAge).toBeDefined()
+    expect(result.depleteAge!).toBeLessThanOrEqual(64)
+  })
+
+  it('contributions are capped at retirementAge (no contributions from a paycheck that stopped)', () => {
+    // Flat $1,000/mo, account claims contributions until 70, but retirement is 62.
+    // With zero growth and zero expenses the end balance isolates contributions:
+    // only ages 60 and 61 contribute (2 × $12,000).
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 70, retirementAge: 62, annualSalary: 0 },
+        accounts: [{
+          id: 'a', name: 'Roth', type: 'roth',
+          balance: 100000,
+          contributionAmount: 1000,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 70,
+          withdrawalStartAge: 60,
+        }],
+        annualExpenses: 0,
+      }),
+      ZERO_RATES,
+    )
+    expect(result.yearlyResults.at(-1)!.totalBalance).toBeCloseTo(100000 + 24000, -2)
+  })
+
+  it('a contributionEndAge earlier than retirementAge is still respected', () => {
+    // Contributions stop at 62 while the salary runs to 65: end balance gains
+    // only the two contributing years.
+    const result = runSingleProjection(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 70, retirementAge: 65, annualSalary: 0 },
+        accounts: [{
+          id: 'a', name: 'Roth', type: 'roth',
+          balance: 100000,
+          contributionAmount: 1000,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 62,
+          withdrawalStartAge: 60,
+        }],
+        annualExpenses: 0,
+      }),
+      ZERO_RATES,
+    )
+    expect(result.yearlyResults.at(-1)!.totalBalance).toBeCloseTo(100000 + 24000, -2)
   })
 })
 
@@ -352,7 +693,7 @@ describe('runSingleProjection — per-segment rates', () => {
     // Expected ending balance: 100K × (1.10)^5 × (1.00)^5 = 161,051
     const result = runSingleProjection(
       inputs({
-        person: { ...defaultInputs().person, currentAge: 60, maxAge: 70 },
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 70, annualSalary: 0 },
         accounts: [{
           id: 'a', name: 'Roth', type: 'roth',
           balance: 100000,
@@ -378,7 +719,7 @@ describe('runSingleProjection — per-segment rates', () => {
     // Same setup, no breakpointRates arg → initial 10% applies for all 10 years
     const result = runSingleProjection(
       inputs({
-        person: { ...defaultInputs().person, currentAge: 60, maxAge: 70 },
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 70, annualSalary: 0 },
         accounts: [{
           id: 'a', name: 'Roth', type: 'roth',
           balance: 100000,
@@ -674,7 +1015,8 @@ describe('runSingleProjection — working-years cash flow', () => {
             contributionEndAge: 41, withdrawalStartAge: 40,
           },
         ],
-        annualExpenses: 75_000, // exactly covered by after-tax salary, zero margin
+        // Exactly the progressive + FICA take-home: zero margin either way.
+        annualExpenses: 100_000 - ordinaryTax(100_000, 'single') - 0.0765 * 100_000,
         socialSecurity: undefined,
         oneTimeExpenses: [],
         person: {
@@ -686,8 +1028,8 @@ describe('runSingleProjection — working-years cash flow', () => {
       ZERO_RATES,
     )
     const yr = result.yearlyResults.at(-1)!
-    // After-tax salary (100k × 0.75 = 75k) exactly covers 75k expenses, so the
-    // taxable account is untouched and the $10k match lands in the 401k.
+    // After-tax salary exactly covers expenses, so the taxable account is
+    // untouched and the $10k match lands in the 401k.
     expect(yr.accountBalances['tax']).toBeCloseTo(50_000, -1)
     expect(yr.accountBalances['k']).toBeCloseTo(10_000, -1)
     expect(yr.withdrawals).toBeCloseTo(0, -1)
@@ -711,10 +1053,11 @@ describe('runSingleProjection — working-years cash flow', () => {
             contributionEndAge: 41, withdrawalStartAge: 40,
           },
         ],
-        // Take-home with pre-tax 401k = (100k − 20k) × 0.75 = 60k, exactly covering
-        // expenses. If the 401k were (wrongly) taxed, take-home would be only 55k
-        // and the taxable account would be tapped for the 5k gap.
-        annualExpenses: 60_000,
+        // Take-home with pre-tax 401k = 100k − 20k − tax(80k) − FICA(100k),
+        // exactly covering expenses. If the 401k deferral were (wrongly) income-
+        // taxed, take-home would fall short and the taxable account would be
+        // tapped for the gap.
+        annualExpenses: 100_000 - tradAnnual - ordinaryTax(80_000, 'single') - 0.0765 * 100_000,
         socialSecurity: undefined,
         oneTimeExpenses: [],
         person: {
@@ -780,5 +1123,20 @@ describe('runSingleProjection — guardrails spending policy (#11)', () => {
     const goodSequence = new Array(15).fill({ stockGrowth: 0.18, inflation: 0 })
     const guard = runSingleProjection(retiree('guardrails'), goodSequence)
     expect(guard.spendAdjustments.some((a) => a.kind === 'raise')).toBe(true)
+  })
+
+  it('reports the lowest spending level reached (a "success" with deep cuts is visible)', () => {
+    const guard = runSingleProjection(retiree('guardrails'), badSequence)
+    // Each cut is −10%: with at least one cut the floor is ≤ 0.9, and it can
+    // never sit below every cut applied back-to-back.
+    const cuts = guard.spendAdjustments.filter((a) => a.kind === 'cut').length
+    expect(cuts).toBeGreaterThan(0)
+    expect(guard.minSpendMultiplier).toBeLessThanOrEqual(0.9)
+    expect(guard.minSpendMultiplier).toBeGreaterThanOrEqual(0.9 ** cuts - 1e-9)
+  })
+
+  it('flat policy always reports a spending floor of 1', () => {
+    const flat = runSingleProjection(retiree('flat'), badSequence)
+    expect(flat.minSpendMultiplier).toBe(1)
   })
 })

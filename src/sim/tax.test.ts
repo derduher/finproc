@@ -64,6 +64,23 @@ describe('taxableSocialSecurity — provisional income', () => {
   })
 })
 
+describe('taxableSocialSecurity — fixed-nominal thresholds', () => {
+  it('thresholds erode in real terms as the price level rises (they are not indexed in law)', () => {
+    // At today's price level this combo sits under the first threshold → untaxed.
+    expect(taxableSocialSecurity(20_000, 10_000, 'single')).toBe(0)
+    // At 2× prices the SAME real income crosses the (real-shrunken) bases:
+    // base1 = 12,500, base2 = 17,000 → provisional 20,000 lands in the 85% tier.
+    // lowerTier = min(10,000, 2,250) = 2,250; taxable = min(17,000, 2,550 + 2,250).
+    expect(taxableSocialSecurity(20_000, 10_000, 'single', 2)).toBeCloseTo(4_800, 0)
+  })
+
+  it('priceLevel 1 (default) reproduces the unscaled thresholds', () => {
+    expect(taxableSocialSecurity(20_000, 10_000, 'single', 1)).toBe(
+      taxableSocialSecurity(20_000, 10_000, 'single'),
+    )
+  })
+})
+
 describe('ltcgTaxOnGain — 0/15/20 stacked on ordinary income', () => {
   it('gain that fits under the 0% ceiling is untaxed', () => {
     // single 0% ceiling $48,350 of taxable income.
@@ -111,6 +128,14 @@ describe('grossUpOrdinary — invert progressive tax to deliver a target net', (
     const gross = grossUpOrdinary(120_000, 0, 'married')
     const tax = ordinaryTax(gross, 'married')
     expect(gross - tax).toBeCloseTo(120_000, 2)
+  })
+
+  it('round-trips with an early-withdrawal penalty rate', () => {
+    const gross = grossUpOrdinary(40_000, 0, 'single', 0.1)
+    const tax = ordinaryTax(gross, 'single')
+    expect(gross - tax - 0.1 * gross).toBeCloseTo(40_000, 2)
+    // The penalty makes the gross strictly larger than the unpenalized one.
+    expect(gross).toBeGreaterThan(grossUpOrdinary(40_000, 0, 'single'))
   })
 })
 

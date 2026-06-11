@@ -13,13 +13,16 @@
  *     year with full coverage of the retirement horizon and report the fraction
  *     that survived (the Trinity-study / cFIREsim approach).
  *
- * Data: approximate annual S&P-500 total returns (incl. dividends) and US CPI
- * inflation, NOMINAL, rounded to 0.1%. Sources: Aswath Damodaran's annual
- * returns dataset (NYU Stern) and BLS CPI. These are illustrative, not a precise
- * record — correct against primary sources if exact figures matter. The engine
- * consumes nominal stock growth and inflation as separate streams (see
- * `projection.ts`), so both must be paired per year for stagflation to read
- * correctly (e.g. the 1970s: positive nominal returns devoured by inflation).
+ * Data: approximate annual S&P-500 total returns (incl. dividends), 10-year US
+ * Treasury total returns, and US CPI inflation, NOMINAL, rounded to 0.1%.
+ * Sources: Aswath Damodaran's annual returns dataset (NYU Stern) and BLS CPI.
+ * These are illustrative, not a precise record — correct against primary
+ * sources if exact figures matter. The engine consumes nominal stock growth,
+ * bond growth, and inflation as separate streams (see `projection.ts`), so all
+ * three must be paired per year for the joint dynamics to read correctly —
+ * 1970s stagflation (positive nominal returns devoured by inflation), 2008's
+ * flight to safety (bonds up while stocks crashed), or 2022 (the rare year
+ * stocks AND bonds fell together).
  */
 import { runSingleProjection, type SampledRates } from './projection'
 import { buildSegments, activeSegment } from './montecarlo'
@@ -29,111 +32,114 @@ export interface HistoricalYear {
   year: number
   /** Nominal total return of US large-cap equities (0.21 = +21%). */
   stock: number
+  /** Nominal total return of the 10-year US Treasury bond (0.05 = +5%). */
+  bond: number
   /** Year-over-year CPI inflation (0.03 = +3%). */
   inflation: number
 }
 
 /**
- * Annual nominal S&P-500 total return + US CPI inflation, 1928–2023.
- * Rounded to 0.1%. See module header for provenance and caveats.
+ * Annual nominal S&P-500 total return + 10-year US Treasury total return +
+ * US CPI inflation, 1928–2023. Rounded to 0.1%. See module header for
+ * provenance and caveats.
  */
 export const HISTORICAL_SERIES: HistoricalYear[] = [
-  { year: 1928, stock: 0.438, inflation: -0.012 },
-  { year: 1929, stock: -0.083, inflation: 0.0 },
-  { year: 1930, stock: -0.251, inflation: -0.027 },
-  { year: 1931, stock: -0.438, inflation: -0.089 },
-  { year: 1932, stock: -0.086, inflation: -0.103 },
-  { year: 1933, stock: 0.5, inflation: -0.052 },
-  { year: 1934, stock: -0.012, inflation: 0.035 },
-  { year: 1935, stock: 0.467, inflation: 0.026 },
-  { year: 1936, stock: 0.319, inflation: 0.01 },
-  { year: 1937, stock: -0.353, inflation: 0.037 },
-  { year: 1938, stock: 0.293, inflation: -0.02 },
-  { year: 1939, stock: -0.011, inflation: -0.013 },
-  { year: 1940, stock: -0.107, inflation: 0.007 },
-  { year: 1941, stock: -0.128, inflation: 0.099 },
-  { year: 1942, stock: 0.192, inflation: 0.09 },
-  { year: 1943, stock: 0.251, inflation: 0.03 },
-  { year: 1944, stock: 0.19, inflation: 0.023 },
-  { year: 1945, stock: 0.358, inflation: 0.022 },
-  { year: 1946, stock: -0.084, inflation: 0.181 },
-  { year: 1947, stock: 0.052, inflation: 0.088 },
-  { year: 1948, stock: 0.057, inflation: 0.03 },
-  { year: 1949, stock: 0.183, inflation: -0.018 },
-  { year: 1950, stock: 0.308, inflation: 0.058 },
-  { year: 1951, stock: 0.24, inflation: 0.06 },
-  { year: 1952, stock: 0.184, inflation: 0.008 },
-  { year: 1953, stock: -0.01, inflation: 0.007 },
-  { year: 1954, stock: 0.526, inflation: -0.007 },
-  { year: 1955, stock: 0.316, inflation: 0.004 },
-  { year: 1956, stock: 0.066, inflation: 0.029 },
-  { year: 1957, stock: -0.108, inflation: 0.03 },
-  { year: 1958, stock: 0.434, inflation: 0.018 },
-  { year: 1959, stock: 0.12, inflation: 0.015 },
-  { year: 1960, stock: 0.005, inflation: 0.014 },
-  { year: 1961, stock: 0.269, inflation: 0.007 },
-  { year: 1962, stock: -0.087, inflation: 0.013 },
-  { year: 1963, stock: 0.228, inflation: 0.016 },
-  { year: 1964, stock: 0.165, inflation: 0.01 },
-  { year: 1965, stock: 0.125, inflation: 0.019 },
-  { year: 1966, stock: -0.101, inflation: 0.035 },
-  { year: 1967, stock: 0.24, inflation: 0.03 },
-  { year: 1968, stock: 0.111, inflation: 0.047 },
-  { year: 1969, stock: -0.085, inflation: 0.062 },
-  { year: 1970, stock: 0.04, inflation: 0.056 },
-  { year: 1971, stock: 0.143, inflation: 0.033 },
-  { year: 1972, stock: 0.189, inflation: 0.034 },
-  { year: 1973, stock: -0.147, inflation: 0.087 },
-  { year: 1974, stock: -0.265, inflation: 0.123 },
-  { year: 1975, stock: 0.372, inflation: 0.069 },
-  { year: 1976, stock: 0.238, inflation: 0.049 },
-  { year: 1977, stock: -0.072, inflation: 0.067 },
-  { year: 1978, stock: 0.066, inflation: 0.09 },
-  { year: 1979, stock: 0.184, inflation: 0.133 },
-  { year: 1980, stock: 0.324, inflation: 0.125 },
-  { year: 1981, stock: -0.049, inflation: 0.089 },
-  { year: 1982, stock: 0.214, inflation: 0.038 },
-  { year: 1983, stock: 0.225, inflation: 0.038 },
-  { year: 1984, stock: 0.063, inflation: 0.04 },
-  { year: 1985, stock: 0.322, inflation: 0.038 },
-  { year: 1986, stock: 0.185, inflation: 0.011 },
-  { year: 1987, stock: 0.052, inflation: 0.044 },
-  { year: 1988, stock: 0.168, inflation: 0.044 },
-  { year: 1989, stock: 0.315, inflation: 0.046 },
-  { year: 1990, stock: -0.032, inflation: 0.061 },
-  { year: 1991, stock: 0.305, inflation: 0.031 },
-  { year: 1992, stock: 0.076, inflation: 0.029 },
-  { year: 1993, stock: 0.101, inflation: 0.027 },
-  { year: 1994, stock: 0.013, inflation: 0.027 },
-  { year: 1995, stock: 0.376, inflation: 0.025 },
-  { year: 1996, stock: 0.23, inflation: 0.033 },
-  { year: 1997, stock: 0.334, inflation: 0.017 },
-  { year: 1998, stock: 0.286, inflation: 0.016 },
-  { year: 1999, stock: 0.21, inflation: 0.027 },
-  { year: 2000, stock: -0.091, inflation: 0.034 },
-  { year: 2001, stock: -0.119, inflation: 0.016 },
-  { year: 2002, stock: -0.221, inflation: 0.024 },
-  { year: 2003, stock: 0.287, inflation: 0.019 },
-  { year: 2004, stock: 0.109, inflation: 0.033 },
-  { year: 2005, stock: 0.049, inflation: 0.034 },
-  { year: 2006, stock: 0.158, inflation: 0.025 },
-  { year: 2007, stock: 0.055, inflation: 0.041 },
-  { year: 2008, stock: -0.37, inflation: 0.001 },
-  { year: 2009, stock: 0.265, inflation: 0.027 },
-  { year: 2010, stock: 0.151, inflation: 0.015 },
-  { year: 2011, stock: 0.021, inflation: 0.03 },
-  { year: 2012, stock: 0.16, inflation: 0.017 },
-  { year: 2013, stock: 0.324, inflation: 0.015 },
-  { year: 2014, stock: 0.137, inflation: 0.008 },
-  { year: 2015, stock: 0.014, inflation: 0.007 },
-  { year: 2016, stock: 0.12, inflation: 0.021 },
-  { year: 2017, stock: 0.218, inflation: 0.021 },
-  { year: 2018, stock: -0.044, inflation: 0.019 },
-  { year: 2019, stock: 0.315, inflation: 0.023 },
-  { year: 2020, stock: 0.184, inflation: 0.014 },
-  { year: 2021, stock: 0.287, inflation: 0.07 },
-  { year: 2022, stock: -0.181, inflation: 0.065 },
-  { year: 2023, stock: 0.263, inflation: 0.034 },
+  { year: 1928, stock: 0.438, inflation: -0.012, bond: 0.008 },
+  { year: 1929, stock: -0.083, inflation: 0.0, bond: 0.042 },
+  { year: 1930, stock: -0.251, inflation: -0.027, bond: 0.045 },
+  { year: 1931, stock: -0.438, inflation: -0.089, bond: -0.026 },
+  { year: 1932, stock: -0.086, inflation: -0.103, bond: 0.088 },
+  { year: 1933, stock: 0.5, inflation: -0.052, bond: 0.019 },
+  { year: 1934, stock: -0.012, inflation: 0.035, bond: 0.08 },
+  { year: 1935, stock: 0.467, inflation: 0.026, bond: 0.045 },
+  { year: 1936, stock: 0.319, inflation: 0.01, bond: 0.05 },
+  { year: 1937, stock: -0.353, inflation: 0.037, bond: 0.014 },
+  { year: 1938, stock: 0.293, inflation: -0.02, bond: 0.042 },
+  { year: 1939, stock: -0.011, inflation: -0.013, bond: 0.044 },
+  { year: 1940, stock: -0.107, inflation: 0.007, bond: 0.054 },
+  { year: 1941, stock: -0.128, inflation: 0.099, bond: -0.02 },
+  { year: 1942, stock: 0.192, inflation: 0.09, bond: 0.023 },
+  { year: 1943, stock: 0.251, inflation: 0.03, bond: 0.025 },
+  { year: 1944, stock: 0.19, inflation: 0.023, bond: 0.026 },
+  { year: 1945, stock: 0.358, inflation: 0.022, bond: 0.038 },
+  { year: 1946, stock: -0.084, inflation: 0.181, bond: 0.031 },
+  { year: 1947, stock: 0.052, inflation: 0.088, bond: 0.009 },
+  { year: 1948, stock: 0.057, inflation: 0.03, bond: 0.02 },
+  { year: 1949, stock: 0.183, inflation: -0.018, bond: 0.047 },
+  { year: 1950, stock: 0.308, inflation: 0.058, bond: 0.004 },
+  { year: 1951, stock: 0.24, inflation: 0.06, bond: -0.003 },
+  { year: 1952, stock: 0.184, inflation: 0.008, bond: 0.023 },
+  { year: 1953, stock: -0.01, inflation: 0.007, bond: 0.041 },
+  { year: 1954, stock: 0.526, inflation: -0.007, bond: 0.033 },
+  { year: 1955, stock: 0.316, inflation: 0.004, bond: -0.013 },
+  { year: 1956, stock: 0.066, inflation: 0.029, bond: -0.023 },
+  { year: 1957, stock: -0.108, inflation: 0.03, bond: 0.068 },
+  { year: 1958, stock: 0.434, inflation: 0.018, bond: -0.021 },
+  { year: 1959, stock: 0.12, inflation: 0.015, bond: -0.026 },
+  { year: 1960, stock: 0.005, inflation: 0.014, bond: 0.116 },
+  { year: 1961, stock: 0.269, inflation: 0.007, bond: 0.021 },
+  { year: 1962, stock: -0.087, inflation: 0.013, bond: 0.057 },
+  { year: 1963, stock: 0.228, inflation: 0.016, bond: 0.017 },
+  { year: 1964, stock: 0.165, inflation: 0.01, bond: 0.037 },
+  { year: 1965, stock: 0.125, inflation: 0.019, bond: 0.007 },
+  { year: 1966, stock: -0.101, inflation: 0.035, bond: 0.029 },
+  { year: 1967, stock: 0.24, inflation: 0.03, bond: -0.016 },
+  { year: 1968, stock: 0.111, inflation: 0.047, bond: 0.033 },
+  { year: 1969, stock: -0.085, inflation: 0.062, bond: -0.05 },
+  { year: 1970, stock: 0.04, inflation: 0.056, bond: 0.168 },
+  { year: 1971, stock: 0.143, inflation: 0.033, bond: 0.098 },
+  { year: 1972, stock: 0.189, inflation: 0.034, bond: 0.028 },
+  { year: 1973, stock: -0.147, inflation: 0.087, bond: 0.037 },
+  { year: 1974, stock: -0.265, inflation: 0.123, bond: 0.02 },
+  { year: 1975, stock: 0.372, inflation: 0.069, bond: 0.036 },
+  { year: 1976, stock: 0.238, inflation: 0.049, bond: 0.16 },
+  { year: 1977, stock: -0.072, inflation: 0.067, bond: 0.013 },
+  { year: 1978, stock: 0.066, inflation: 0.09, bond: -0.008 },
+  { year: 1979, stock: 0.184, inflation: 0.133, bond: 0.007 },
+  { year: 1980, stock: 0.324, inflation: 0.125, bond: -0.03 },
+  { year: 1981, stock: -0.049, inflation: 0.089, bond: 0.082 },
+  { year: 1982, stock: 0.214, inflation: 0.038, bond: 0.328 },
+  { year: 1983, stock: 0.225, inflation: 0.038, bond: 0.032 },
+  { year: 1984, stock: 0.063, inflation: 0.04, bond: 0.137 },
+  { year: 1985, stock: 0.322, inflation: 0.038, bond: 0.257 },
+  { year: 1986, stock: 0.185, inflation: 0.011, bond: 0.243 },
+  { year: 1987, stock: 0.052, inflation: 0.044, bond: -0.05 },
+  { year: 1988, stock: 0.168, inflation: 0.044, bond: 0.082 },
+  { year: 1989, stock: 0.315, inflation: 0.046, bond: 0.177 },
+  { year: 1990, stock: -0.032, inflation: 0.061, bond: 0.062 },
+  { year: 1991, stock: 0.305, inflation: 0.031, bond: 0.15 },
+  { year: 1992, stock: 0.076, inflation: 0.029, bond: 0.094 },
+  { year: 1993, stock: 0.101, inflation: 0.027, bond: 0.142 },
+  { year: 1994, stock: 0.013, inflation: 0.027, bond: -0.08 },
+  { year: 1995, stock: 0.376, inflation: 0.025, bond: 0.235 },
+  { year: 1996, stock: 0.23, inflation: 0.033, bond: 0.014 },
+  { year: 1997, stock: 0.334, inflation: 0.017, bond: 0.099 },
+  { year: 1998, stock: 0.286, inflation: 0.016, bond: 0.149 },
+  { year: 1999, stock: 0.21, inflation: 0.027, bond: -0.083 },
+  { year: 2000, stock: -0.091, inflation: 0.034, bond: 0.167 },
+  { year: 2001, stock: -0.119, inflation: 0.016, bond: 0.056 },
+  { year: 2002, stock: -0.221, inflation: 0.024, bond: 0.151 },
+  { year: 2003, stock: 0.287, inflation: 0.019, bond: 0.004 },
+  { year: 2004, stock: 0.109, inflation: 0.033, bond: 0.045 },
+  { year: 2005, stock: 0.049, inflation: 0.034, bond: 0.029 },
+  { year: 2006, stock: 0.158, inflation: 0.025, bond: 0.02 },
+  { year: 2007, stock: 0.055, inflation: 0.041, bond: 0.102 },
+  { year: 2008, stock: -0.37, inflation: 0.001, bond: 0.201 },
+  { year: 2009, stock: 0.265, inflation: 0.027, bond: -0.111 },
+  { year: 2010, stock: 0.151, inflation: 0.015, bond: 0.085 },
+  { year: 2011, stock: 0.021, inflation: 0.03, bond: 0.16 },
+  { year: 2012, stock: 0.16, inflation: 0.017, bond: 0.03 },
+  { year: 2013, stock: 0.324, inflation: 0.015, bond: -0.091 },
+  { year: 2014, stock: 0.137, inflation: 0.008, bond: 0.107 },
+  { year: 2015, stock: 0.014, inflation: 0.007, bond: 0.013 },
+  { year: 2016, stock: 0.12, inflation: 0.021, bond: 0.007 },
+  { year: 2017, stock: 0.218, inflation: 0.021, bond: 0.028 },
+  { year: 2018, stock: -0.044, inflation: 0.019, bond: 0.0 },
+  { year: 2019, stock: 0.315, inflation: 0.023, bond: 0.096 },
+  { year: 2020, stock: 0.184, inflation: 0.014, bond: 0.113 },
+  { year: 2021, stock: 0.287, inflation: 0.07, bond: -0.044 },
+  { year: 2022, stock: -0.181, inflation: 0.065, bond: -0.178 },
+  { year: 2023, stock: 0.263, inflation: 0.034, bond: 0.039 },
 ]
 
 const FIRST_YEAR = HISTORICAL_SERIES[0].year
@@ -215,11 +221,17 @@ export function buildHistoricalSchedule(args: {
     const offset = age - anchorAge
     const hist = offset >= 0 ? byYear.get(startYear + offset) : undefined
     if (hist) {
-      schedule[y] = { stockGrowth: hist.stock, inflation: hist.inflation }
+      // Replay all three streams together so the joint dynamics read correctly
+      // (2008's bond rally against the crash; 2022's joint stock+bond loss).
+      schedule[y] = { stockGrowth: hist.stock, inflation: hist.inflation, bondGrowth: hist.bond }
     } else {
       // Pre-crisis run-up or post-data tail: use the expected mean for this age.
       const seg = activeSegment(segments, age)
-      schedule[y] = { stockGrowth: seg.growthMean, inflation: seg.inflationMean }
+      schedule[y] = {
+        stockGrowth: seg.growthMean,
+        inflation: seg.inflationMean,
+        bondGrowth: seg.bondMean,
+      }
     }
   }
   return schedule

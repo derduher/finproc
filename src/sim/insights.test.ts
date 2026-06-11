@@ -59,7 +59,7 @@ describe('computeInsights — healthcare-gap rule', () => {
 
   it('does NOT fire when retire age is 65 or later', () => {
     const inp = inputs({
-      person: { ...defaultInputs().person, currentAge: 40 },
+      person: { ...defaultInputs().person, currentAge: 40, retirementAge: 67 },
       accounts: [{ ...STD_ACCOUNTS[1], contributionEndAge: 67 }],
     })
     const result = runMonteCarlo(inp, 20, 42)
@@ -122,17 +122,21 @@ describe('computeInsights — retire-one-year-later rule', () => {
   })
 
   it('bug #6: a real, large effect still fires at full (1000-run) resolution', () => {
-    // $1.3M, retire 62, expenses 80k → base ≈ 30%, +1yr ≈ 60% (delta ≈ 30pp, far
-    // above the significance bar at n=1000). Guards against the gate over-suppressing.
+    // $300k at 60, $200k salary, retire 62, expenses 55k to 75 → base ≈ 34%,
+    // +1yr ≈ 51% (delta ≈ 17pp, far above the significance bar at n=1000).
+    // Guards against the gate over-suppressing. (With realistic per-year market
+    // volatility, one extra working year moves success less than the old
+    // near-deterministic sampler claimed, so the fixture needs salary large
+    // relative to the portfolio for the effect to be this big.)
     const inp = inputs({
-      person: { ...defaultInputs().person, currentAge: 60, maxAge: 90, annualSalary: 120_000 },
+      person: { ...defaultInputs().person, currentAge: 60, maxAge: 75, annualSalary: 200_000 },
       accounts: [{
         id: 'trad', name: '401k', type: 'traditional',
-        balance: 1_300_000,
-        contributionAmount: 2500, contributionType: 'flat', contributionFrequency: 'monthly',
+        balance: 300_000,
+        contributionAmount: 6000, contributionType: 'flat', contributionFrequency: 'monthly',
         contributionEndAge: 62, withdrawalStartAge: 59,
       }],
-      annualExpenses: 80_000,
+      annualExpenses: 55_000,
     })
     const result = runMonteCarlo(inp, 1000, 42)
     const insights = computeInsights(inp, result, { runCount: 1000 })

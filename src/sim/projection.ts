@@ -1,5 +1,5 @@
 import { SimAccount } from './account'
-import { annualToMonthlyRate, inflate, rmdDivisor } from '../math'
+import { annualToMonthlyRate, inflate, rmdDivisor, rmdStartAge } from '../math'
 import {
   ordinaryTax,
   taxableSocialSecurity,
@@ -7,6 +7,9 @@ import {
   grossUpOrdinary,
   grossUpTaxableGain,
   STANDARD_DEDUCTION,
+  FICA_RATE,
+  EARLY_WITHDRAWAL_AGE,
+  EARLY_WITHDRAWAL_PENALTY,
 } from './tax'
 import type { FilingStatus } from './tax'
 import { WithdrawalStrategy } from '../schema'
@@ -23,10 +26,17 @@ import type { SimulationInputs } from '../schema'
 interface TaxContext {
   fs: FilingStatus
   priceLevel: number
+  /** Age at the start of this year — gates the 10% early-distribution penalty. */
+  age: number
   /** Gross ordinary income realized this year (incl. taxable SS), today's $. */
   ordinaryReal: number
   /** Realized long-term gains this year, today's $. */
   ltcgReal: number
+}
+
+/** The early-distribution penalty rate in force for traditional draws at `age`. */
+function penaltyRate(tax: TaxContext): number {
+  return tax.age < EARLY_WITHDRAWAL_AGE ? EARLY_WITHDRAWAL_PENALTY : 0
 }
 
 /** Total taxable income sitting *below* the next LTCG dollar (today's $). */
@@ -39,6 +49,13 @@ export interface SampledRates {
   stockGrowth: number
   /** Annual inflation for this run */
   inflation: number
+  /**
+   * Annual nominal bond growth, applied to the non-stock fraction of allocated
+   * accounts. Optional for back-compat (legacy schedules, test fixtures): when
+   * absent, the stock rate is used for everything — the original single-asset
+   * behavior.
+   */
+  bondGrowth?: number
 }
 
 export interface YearEndState {
@@ -66,6 +83,12 @@ export interface ProjectionResult {
   depleteAge: number | undefined
   /** Guardrails spending changes across the run (empty for the flat policy). */
   spendAdjustments: SpendAdjustment[]
+  /**
+   * Lowest spending multiplier reached during the run (1 = the plan's full
+   * spend). Always 1 under the flat policy. Makes a guardrails "success" that
+   * survived only by cutting spending 30% visible instead of silent.
+   */
+  minSpendMultiplier: number
 }
 
 /** Guardrails: trim/raise spending by this fraction when the WR drifts past the band. */
@@ -116,20 +139,33 @@ export function runSingleProjection(
   // Guardrails state, persisted across years: the spend ratchets and stays at the
   // new level (inflation-adjusted) until the next trigger.
   let spendMultiplier = 1
+  let minSpendMultiplier = 1
   let baseWithdrawalRate: number | undefined
   const spendAdjustments: SpendAdjustment[] = []
 
-  const simAccounts = accounts.map((a) => new SimAccount(a, 0))
+  // person.retirementAge is the single retirement definition: salary stops there,
+  // and contributions can never outlive the paycheck that funds them — each
+  // account's contributionEndAge is clamped to it. (An earlier contributionEndAge
+  // is still respected: someone can stop funding one account before retiring.)
+  const retirementAge = person.retirementAge
+  const simAccounts = accounts.map(
+    (a) =>
+      new SimAccount(
+        { ...a, contributionEndAge: Math.min(a.contributionEndAge, retirementAge) },
+        0,
+      ),
+  )
 
-  // RMD reinvestment sink: forced RMDs beyond spending need are reinvested as
-  // after-tax cash in a taxable account (spec §3.4) rather than destroyed. Reuse an
-  // existing taxable account if present; otherwise create one lazily on first use.
+  // After-tax cash sink: forced RMDs beyond spending need (spec §3.4) and unspent
+  // working-years take-home are reinvested in a taxable account rather than
+  // destroyed. Reuse an existing taxable account if present; otherwise create one
+  // lazily on first use.
   let reinvestTarget: SimAccount | undefined = simAccounts.find((a) => a.type === 'taxable')
-  const rmdSink = (): SimAccount => {
+  const cashSink = (): SimAccount => {
     if (!reinvestTarget) {
       reinvestTarget = new SimAccount({
         id: '__rmd_reinvest',
-        name: 'RMD reinvestment',
+        name: 'Reinvested cash',
         type: 'taxable',
         balance: 0,
         costBasis: 0,
@@ -148,12 +184,9 @@ export function runSingleProjection(
   const maxAge = person.maxAge
   const years = maxAge - startAge
 
-  // "Effective retirement age" — the year at which salary income stops.
-  // Proxy: the latest contributionEndAge across all accounts. If no accounts,
-  // assume the person retires at the start of the simulation (no salary).
-  const effectiveRetirementAge = simAccounts.length > 0
-    ? Math.max(...simAccounts.map((a) => a.contributionEndAge))
-    : startAge
+  // The year at which salary income stops. If the person is already past their
+  // retirement age, no salary flows at all.
+  const effectiveRetirementAge = retirementAge
 
   const yearlyResults: YearEndState[] = []
   let succeeded = true
@@ -174,29 +207,37 @@ export function runSingleProjection(
     // Determine active rates for this year.
     let growthRate: number
     let inflationRate: number
+    let bondRate: number
     if (yearlyRates) {
       // Per-year schedule: year y uses rates[y] (reuse the last entry if short).
       const r = yearlyRates[Math.min(y, yearlyRates.length - 1)]
       growthRate = r.stockGrowth
       inflationRate = r.inflation
+      bondRate = r.bondGrowth ?? r.stockGrowth
     } else {
       // Single constant rate, optionally superseded by breakpoint segments. Each
       // breakpoint that has already started wins; the latest applicable one
       // applies. Without breakpointRates the initial rates apply throughout.
       growthRate = constantRates.stockGrowth
       inflationRate = constantRates.inflation
+      bondRate = constantRates.bondGrowth ?? constantRates.stockGrowth
       for (let k = 0; k < breakpoints.length; k++) {
         if (yearStartAge >= breakpoints[k].startAge) {
           const r = breakpointRates?.[k]
           if (r !== undefined) {
             growthRate = r.stockGrowth
             inflationRate = r.inflation
+            bondRate = r.bondGrowth ?? r.stockGrowth
           }
         }
       }
     }
 
-    const monthlyGrowthRate = annualToMonthlyRate(growthRate)
+    const monthlyStockRate = annualToMonthlyRate(growthRate)
+    const monthlyBondRate = annualToMonthlyRate(bondRate)
+    // Per-account blended growth: stockAllocation in stocks, remainder in bonds.
+    const monthlyRateFor = (alloc: number) =>
+      alloc * monthlyStockRate + (1 - alloc) * monthlyBondRate
     const yearsFromStart = y
 
     // Price level applied to this year's flows = inflation accrued over prior
@@ -216,7 +257,7 @@ export function runSingleProjection(
     // Simulate 12 months of growth + contributions
     for (let m = 0; m < 12; m++) {
       for (const acc of simAccounts) {
-        acc.applyMonthlyGrowth(monthlyGrowthRate)
+        acc.applyMonthlyGrowth(monthlyRateFor(acc.stockAllocation))
         acc.contribute(yearStartAge, annualSalary, priceLevel)
       }
     }
@@ -237,6 +278,7 @@ export function runSingleProjection(
       const tax: TaxContext = {
         fs: filingStatus,
         priceLevel,
+        age: yearStartAge,
         ordinaryReal: 0,
         ltcgReal: 0,
       }
@@ -263,9 +305,7 @@ export function runSingleProjection(
         }
       }
 
-      // Disposable income from salary during working years.
-      // The user's salary covers expenses while they're still employed
-      // (proxy: until the latest contributionEndAge across all accounts).
+      // Disposable income from salary during working years (until retirementAge).
       //
       // Cash flow of a paycheck:
       //   - Traditional employee contributions are PRE-TAX — they leave the
@@ -274,10 +314,14 @@ export function runSingleProjection(
       //     take-home pay.
       //   - The employer match is NOT paid from salary at all, so it never
       //     reduces take-home.
+      //   - FICA applies to GROSS salary (401(k) deferrals are FICA-taxable).
       //
-      //   take-home = (salary − preTaxContrib) × (1 − marginalRate) − afterTaxContrib
+      // Income tax uses the same progressive federal schedule as the withdrawal
+      // phase (brackets are in today's dollars; the salary is deflated by the
+      // realized price level, matching the IRS's annual bracket indexing), plus
+      // flat FICA. State tax is out of scope, as in the withdrawal phase.
       let disposableIncome = 0
-      if (yearStartAge < effectiveRetirementAge) {
+      if (yearStartAge < effectiveRetirementAge && annualSalary > 0) {
         let preTaxContrib = 0 // traditional employee contributions
         let afterTaxContrib = 0 // roth + taxable employee contributions
         for (const acc of simAccounts) {
@@ -285,8 +329,11 @@ export function runSingleProjection(
           if (acc.type === 'traditional') preTaxContrib += employee
           else afterTaxContrib += employee
         }
-        const taxableSalary = Math.max(0, annualSalary - preTaxContrib)
-        const afterTaxSalary = taxableSalary * (1 - person.marginalTaxRate)
+        const salaryReal = annualSalary / priceLevel
+        const taxableReal = Math.max(0, (annualSalary - preTaxContrib) / priceLevel)
+        const incomeTaxReal = ordinaryTax(taxableReal, filingStatus)
+        const ficaReal = FICA_RATE * salaryReal
+        const afterTaxSalary = (taxableReal - incomeTaxReal - ficaReal) * priceLevel
         disposableIncome = Math.max(0, afterTaxSalary - afterTaxContrib)
       }
 
@@ -302,7 +349,12 @@ export function runSingleProjection(
       if (ssIncome > 0) {
         const ssReal = ssIncome / priceLevel
         const portfolioNeedEst = Math.max(0, inflatedExpenses + oneTimeTotal - ssIncome - disposableIncome)
-        const taxableSSReal = taxableSocialSecurity(ssReal, portfolioNeedEst / priceLevel, filingStatus)
+        const taxableSSReal = taxableSocialSecurity(
+          ssReal,
+          portfolioNeedEst / priceLevel,
+          filingStatus,
+          priceLevel,
+        )
         tax.ordinaryReal = taxableSSReal
         ssNet = ssIncome - ordinaryTax(taxableSSReal, filingStatus) * priceLevel
       }
@@ -332,11 +384,21 @@ export function runSingleProjection(
             spendMultiplier *= 1 + GUARDRAIL_STEP
             spendAdjustments.push({ age: yearEndAge, kind: 'raise' })
           }
+          minSpendMultiplier = Math.min(minSpendMultiplier, spendMultiplier)
         }
         spendThisYear = inflatedExpenses * spendMultiplier
       }
 
       const netNeed = Math.max(0, spendThisYear + oneTimeTotal - ssNet - disposableIncome)
+
+      // Unspent income is savings: take-home (plus SS) above this year's spending
+      // is banked in taxable rather than discarded. Without this, an under-spender
+      // accumulates nothing beyond their configured contributions.
+      const surplus = Math.max(0, ssNet + disposableIncome - spendThisYear - oneTimeTotal)
+      if (surplus > 0) {
+        cashSink().deposit(surplus)
+        contributionsThisYear += surplus
+      }
 
       let shortfall = 0
       if (netNeed > 0) {
@@ -394,13 +456,14 @@ export function runSingleProjection(
         }
       }
 
-      // RMDs (spec §3.4): at age 73+, each traditional account must distribute at
+      // RMDs (spec §3.4): from the cohort's start age (73, or 75 for those born
+      // 1960+ under SECURE 2.0), each traditional account must distribute at
       // least balance/divisor. Withdrawals already taken this year count toward the
       // RMD floor; only the remaining shortfall is forced out. Forced proceeds are
       // ordinary income — taxed at the progressive marginal position above whatever
       // was already realized this year — and the after-tax remainder is reinvested
       // in taxable, never destroyed. Runs regardless of spending need.
-      if (!depleted) {
+      if (!depleted && yearStartAge >= rmdStartAge(person.currentAge)) {
         const divisor = rmdDivisor(yearStartAge)
         if (divisor !== undefined) {
           // Snapshot traditional accounts so lazily creating the sink (which pushes
@@ -420,7 +483,7 @@ export function runSingleProjection(
               ordinaryTax(tax.ordinaryReal, filingStatus)
             tax.ordinaryReal += grossReal
             const net = (grossReal - incTaxReal) * priceLevel
-            rmdSink().deposit(net)
+            cashSink().deposit(net)
           }
         }
       }
@@ -445,7 +508,7 @@ export function runSingleProjection(
     })
   }
 
-  return { yearlyResults, succeeded, depleteAge, spendAdjustments }
+  return { yearlyResults, succeeded, depleteAge, spendAdjustments, minSpendMultiplier }
 }
 
 // ─── Withdrawal orchestration ─────────────────────────────────────────────────
@@ -527,10 +590,12 @@ function makeProportionalWithdrawals(
  * committed in `netFromGross` against the actual (possibly balance-capped) gross.
  */
 function grossNeeded(acc: SimAccount, netNeeded: number, tax: TaxContext): number {
+  // Roth: modeled penalty- and tax-free (basis-first simplification — real Roth
+  // earnings drawn before 59½ would owe tax + penalty).
   if (acc.type === 'roth') return netNeeded
   const netReal = netNeeded / tax.priceLevel
   if (acc.type === 'traditional') {
-    return grossUpOrdinary(netReal, tax.ordinaryReal, tax.fs) * tax.priceLevel
+    return grossUpOrdinary(netReal, tax.ordinaryReal, tax.fs, penaltyRate(tax)) * tax.priceLevel
   }
   const bal = acc.getBalance()
   const gainFrac = bal > 0 ? Math.max(0, (bal - acc.getCostBasis()) / bal) : 0
@@ -553,8 +618,9 @@ function netFromGross(
   if (acc.type === 'traditional') {
     const incTax =
       ordinaryTax(tax.ordinaryReal + grossReal, tax.fs) - ordinaryTax(tax.ordinaryReal, tax.fs)
+    const penalty = penaltyRate(tax) * grossReal
     tax.ordinaryReal += grossReal
-    return (grossReal - incTax) * tax.priceLevel
+    return (grossReal - incTax - penalty) * tax.priceLevel
   }
   // taxable: gain fraction derived from the pre-withdrawal balance and basis.
   // (Reconstructing from post-withdrawal state breaks when the account is fully

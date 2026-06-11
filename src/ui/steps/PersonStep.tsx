@@ -96,31 +96,20 @@ export function PersonStep() {
             <div className="label" style={{ marginBottom: 12 }}>tax assumptions</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
               <Field
-                label="Marginal income tax"
-                hint="applied to traditional withdrawals"
-                tooltip="Simplification: a single flat rate is applied throughout. No bracket phaseouts or state-specific rules are modeled."
+                label="Filing status"
+                hint="sets your federal brackets"
+                tooltip="Taxes are computed from progressive federal brackets, the standard deduction, partial Social Security taxation, and the 0/15/20% capital-gains schedule for this filing status. Working years also include 7.65% FICA."
               >
-                <NumInput
-                  id="marginal-tax"
-                  type="number" min={0} max={70} step={1} suffix="%"
-                  value={(person.marginalTaxRate * 100).toFixed(0)}
-                  aria-label="Marginal income tax rate"
-                  onChange={(e) => patchPerson({ marginalTaxRate: Number(e.target.value) / 100 })}
-                />
-              </Field>
-
-              <Field
-                label="Long-term capital gains"
-                hint="taxable account gains"
-                tooltip="Applied to the gain fraction of taxable brokerage withdrawals. 0%, 15%, or 20% depending on income."
-              >
-                <NumInput
-                  id="ltcg-rate"
-                  type="number" min={0} max={40} step={1} suffix="%"
-                  value={(person.ltcgRate * 100).toFixed(0)}
-                  aria-label="Long-term capital gains rate"
-                  onChange={(e) => patchPerson({ ltcgRate: Number(e.target.value) / 100 })}
-                />
+                <select
+                  id="filing-status"
+                  aria-label="Filing status"
+                  value={person.filingStatus ?? 'single'}
+                  onChange={(e) => patchPerson({ filingStatus: e.target.value as 'single' | 'married' })}
+                  style={{ width: '100%' }}
+                >
+                  <option value="single">Single</option>
+                  <option value="married">Married filing jointly</option>
+                </select>
               </Field>
             </div>
           </div>
@@ -146,7 +135,7 @@ export function PersonStep() {
         </svg>
         <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.45 }}>
           <b style={{ color: 'var(--ink)', fontWeight: 500 }}>Documented simplifications.</b>{' '}
-          We model a flat marginal rate (not bracket-by-bracket), and don't reduce taxable income for traditional contributions. State taxes and healthcare costs aren't modeled — include them in your expenses on step&nbsp;4.
+          Federal tax is modeled bracket-by-bracket (traditional contributions reduce taxable income; working years add 7.65% FICA). State taxes, the Social Security wage-base cap, and healthcare costs aren't modeled — include them in your expenses on step&nbsp;4.
         </div>
       </div>
     </div>

@@ -156,6 +156,36 @@ describe('SimAccount — contributions', () => {
     expect(acc.getBalance()).toBeCloseTo(24 * 500, 2)
   })
 
+  it('flat contributions are indexed by the cumulative price level (colaFactor)', () => {
+    // A "flat $500/mo" plan means $500 in today's dollars: a saver raises the
+    // nominal amount with inflation. At a price level of 1.5 the nominal
+    // contribution is $750.
+    const acc = new SimAccount(
+      makeAccount({ balance: 0, contributionAmount: 500, contributionType: 'flat', contributionFrequency: 'monthly', type: 'roth' }),
+      0,
+    )
+    acc.applyMonthlyGrowth(0)
+    acc.contribute(0, 50000, 1.5)
+    expect(acc.getBalance()).toBeCloseTo(750, 2)
+  })
+
+  it('flat employer match is indexed by colaFactor too', () => {
+    const acc = new SimAccount(
+      makeAccount({
+        balance: 0,
+        contributionAmount: 0,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+        employerMatch: { type: 'flat', annualAmount: 1200 },
+      }),
+      0,
+    )
+    acc.applyMonthlyGrowth(0)
+    acc.contribute(0, 50000, 2)
+    // $1200/yr → $100/mo at price level 1; ×2 at price level 2.
+    expect(acc.getBalance()).toBeCloseTo(200, 2)
+  })
+
   it('percent-of-salary contribution: monthly amount = (pct × salary) / 12', () => {
     const acc = new SimAccount(
       makeAccount({ balance: 0, contributionAmount: 0.15, contributionType: 'percent', contributionFrequency: 'monthly' }),

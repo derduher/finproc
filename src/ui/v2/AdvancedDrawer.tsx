@@ -482,7 +482,7 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
           </Acc>
 
           {/* Taxes */}
-          <Acc title="Taxes" value={`${(person.filingStatus ?? 'single') === 'married' ? 'Married' : 'Single'} · ${Math.round(person.marginalTaxRate * 100)}% bracket`}>
+          <Acc title="Taxes" value={(person.filingStatus ?? 'single') === 'married' ? 'Married' : 'Single'}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span className="micro">filing status</span>
@@ -496,12 +496,8 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                   <option value="married">Married filing jointly</option>
                 </select>
               </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span className="micro">working-years marginal rate %</span>
-                <input type="number" aria-label="Marginal tax rate" value={Math.round(person.marginalTaxRate * 100)} onChange={(e) => patchPerson({ marginalTaxRate: Number(e.target.value) / 100 })} style={{ ...pill, width: 72 }} />
-              </label>
             </div>
-            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>Retirement withdrawals use progressive federal brackets, the standard deduction, partial Social Security taxation, and 0/15/20% capital gains for your filing status. The marginal rate above only sets your working-years take-home.</div>
+            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>Working years and retirement both use progressive federal brackets for your filing status — the standard deduction, partial Social Security taxation, and 0/15/20% capital gains — plus 7.65% FICA on salary. State tax isn't modeled.</div>
           </Acc>
 
           {/* Plan-to age */}

@@ -3,6 +3,7 @@ import type { SampledRates, SpendAdjustment } from './projection'
 import { aggregateCashflows } from './cashflow'
 import { sampleAgeAtDeath, MORTALITY_MAX_AGE } from './mortality'
 import { mulberry32, boxMullerNormal, p10p90ToMean, p10p90ToSigma, percentile } from '../math'
+import { DEFAULT_BOND_BAND } from '../schema'
 import type { SimulationInputs } from '../schema'
 
 export interface MonteCarloYearlyResult {
@@ -62,6 +63,13 @@ export interface MonteCarloResult {
   samplePaths: SamplePath[]
   /** Depletion timing at a few worst-case fractions (magnitude + timing risk read) */
   shortfallByPercentile: ShortfallPercentile[]
+  /**
+   * 10th percentile of each run's lowest spending multiplier (guardrails). 1
+   * means even the worst tenth of futures never cut spending; 0.81 means the
+   * worst tenth cut at least ~19%. Always 1 under the flat policy. Optional on
+   * legacy cached results.
+   */
+  spendFloorP10?: number
 }
 
 /** Worst-case fractions reported in `shortfallByPercentile`. */
@@ -99,12 +107,14 @@ export type ProgressCallback = (event: ProgressEvent) => void
 /**
  * Run Monte Carlo simulation with `runCount` independent samples.
  *
- * Rates are sampled once per breakpoint segment per run using a seeded PRNG
- * derived from `baseSeed`. This guarantees reproducible results for the same seed.
+ * Each run gets a per-year rate schedule from `buildRateSchedule`: one epistemic
+ * draw per run positions the run's long-run average inside the user's P10–P90
+ * band, and calibrated per-year volatility (AR(1) + stock↔inflation correlation)
+ * supplies year-to-year market noise on top. A seeded PRNG (`baseSeed`)
+ * guarantees reproducible results for the same seed.
  *
- * Per-segment sampling:
- *  - Segment 0 (initial): uses initialStockGrowth{Min,Max} / initialInflation{Min,Max}
- *  - Segment k (breakpoint k): uses breakpoints[k].stockGrowth{Min,Max} / inflationMin/Max
+ * Segments: segment 0 uses initialStockGrowth{Min,Max} / initialInflation{Min,Max};
+ * segment k uses breakpoints[k] from its startAge onward.
  */
 export function runMonteCarlo(
   inputs: SimulationInputs,
@@ -138,6 +148,7 @@ export function runMonteCarlo(
   const endBalances: number[] = []
   let successCount = 0
   const depleteAges: number[] = []
+  const spendFloors: number[] = []
   const perRunYears: import('./projection').YearEndState[][] = []
   // Guardrails adjustments, captured only for the sampled runs (for the chart).
   const sampleAdjustments: SpendAdjustment[][] = []
@@ -178,6 +189,7 @@ export function runMonteCarlo(
 
     const endBalance = result.yearlyResults.at(-1)?.totalBalance ?? 0
     endBalances.push(endBalance)
+    spendFloors.push(result.minSpendMultiplier)
 
     for (let y = 0; y < result.yearlyResults.length; y++) {
       balancesByYear[y].push(result.yearlyResults[y].totalBalance)
@@ -243,6 +255,7 @@ export function runMonteCarlo(
     medianDepleteAge: depleteAges.length > 0 ? percentile(depleteAges, 50) : undefined,
     samplePaths,
     shortfallByPercentile,
+    spendFloorP10: percentile(spendFloors, 10),
   }
   onProgress?.({ stage: 'aggregate', done: 1, total: 1 })
   return result
@@ -255,56 +268,95 @@ export interface RateSegment {
   growthSigma: number
   inflationMean: number
   inflationSigma: number
+  /** Long-run bond return mean/sigma (global band; same in every segment). */
+  bondMean: number
+  bondSigma: number
 }
 
-/** Lag-1 serial correlation applied to the standardized return / inflation shocks. */
+/** Lag-1 serial correlation applied to the standardized per-year shocks. */
 export interface RatePersistence {
   /** Year-to-year autocorrelation of equity returns (multi-year bear/bull runs). */
   stock: number
   /** Year-to-year autocorrelation of inflation (empirically high). */
   inflation: number
+  /** Year-to-year autocorrelation of bond returns (mild). */
+  bond: number
 }
 
 /**
- * Default serial-correlation coefficients. The previous IID behavior is exactly
- * the `{ stock: 0, inflation: 0 }` special case.
+ * Default serial-correlation coefficients. IID behavior is exactly the all-zero
+ * special case.
  *
  * Equity returns get a modest positive coefficient: annual returns are close to a
  * random walk, but bear/bull markets persist across years, and pure IID lets a
  * crash year stand alone — *understating* sequence-of-returns risk. Inflation gets
  * a much larger coefficient: realized inflation is strongly persistent (high-
  * inflation regimes last years, e.g. the 1970s), which IID sampling erased. The
- * coefficients only reshape the *path*; each year's marginal distribution (the
- * user's P10/P90 spread) is preserved exactly.
+ * coefficients only reshape the *path*; each year's marginal distribution is
+ * preserved exactly.
  */
-export const DEFAULT_PERSISTENCE: RatePersistence = { stock: 0.15, inflation: 0.65 }
+export const DEFAULT_PERSISTENCE: RatePersistence = { stock: 0.15, inflation: 0.65, bond: 0.1 }
 
 /**
  * Default contemporaneous correlation between the equity-return and inflation
  * shocks (#9). Negative: high-inflation years historically depress nominal equity
  * returns (the 1970s), so the previous independent sampling understated the joint
- * "stagflation" risk where both move against the retiree at once. Like the
- * persistence coefficients it only reshapes the joint *path* — each stream's
- * marginal distribution (the user's P10/P90 spread) is preserved exactly. `0`
- * reproduces the prior independent draws.
+ * "stagflation" risk where both move against the retiree at once. It only
+ * reshapes the joint *path* — each stream's per-year marginal distribution is
+ * preserved exactly. `0` reproduces independent draws.
  */
 export const DEFAULT_RATE_CORRELATION = -0.35
 
+/** Per-year (market) volatility of each stream, as a standard deviation. */
+export interface AnnualVolatility {
+  stock: number
+  inflation: number
+  bond: number
+}
+
 /**
- * Build a per-year `SampledRates` schedule with AR(1) serial correlation and a
- * contemporaneous return↔inflation correlation.
+ * Calibrated year-to-year volatility, distinct from the user's P10–P90 band.
  *
- * Each stream carries a standardized state `z` across years (and across segment
- * breakpoints): `zₜ = ρ·zₜ₋₁ + √(1−ρ²)·εₜ`, with `z₀ = ε₀`. The innovations
- * `εₜ` are drawn jointly so that `corr(εStock, εInfl) = correlation` (Cholesky:
- * `εInfl = c·εStock + √(1−c²)·η`). Each `εₜ` and `zₜ` stays marginally `N(0,1)`,
- * so converting by the active segment's `mean + sigma·z` preserves that segment's
- * distribution exactly — only the joint structure (autocorrelation across years +
- * cross-correlation within a year) changes. With `persistence = {0,0}` and
- * `correlation = 0` the schedule reduces to the plain independent per-year draws.
+ * The user band expresses *epistemic* uncertainty — "what will markets average
+ * over my horizon?" — and is far too narrow to describe single years (a 4%–10%
+ * band implies σ ≈ 2.3%/yr, an asset that essentially never has a down year).
+ * Year-to-year market noise is layered on separately with these constants,
+ * calibrated against the app's own 1928–2023 series (`historical.ts`): nominal
+ * S&P-500 σ ≈ 19.6% full-history (~16–17% postwar), CPI σ ≈ 3.9% full-history
+ * (~2.8% postwar). We use slightly-below-full-history values since the user's
+ * epistemic band adds additional spread on top. Bond σ ≈ 7% matches 10-year
+ * Treasury total returns.
+ */
+export const ANNUAL_VOLATILITY: AnnualVolatility = { stock: 0.17, inflation: 0.025, bond: 0.07 }
+
+/** Clamp bounds for sampled rates: keep 1+rate strictly positive and bounded. */
+const RATE_CLAMP = {
+  stock: { min: -0.95, max: 3 },
+  inflation: { min: -0.5, max: 2 },
+  bond: { min: -0.95, max: 3 },
+} as const
+
+/**
+ * Build a per-year `SampledRates` schedule.
  *
- * Draw order (stock shock, then inflation shock, per year) matches the prior loop,
- * so `{0,0}` persistence with `0` correlation is bit-for-bit identical.
+ * Two layers of randomness, with distinct meanings:
+ *
+ * 1. **Epistemic (per run)** — one standardized draw per stream shifts the
+ *    long-run average of the entire run by `segSigma · zMean` (each segment's own
+ *    sigma scales the shared draw, so a pessimistic run is pessimistic in every
+ *    segment). This is what the user's P10–P90 band describes: uncertainty about
+ *    the long-run average, not about any single year.
+ * 2. **Market (per year)** — `annualVol`-sized shocks with AR(1) persistence and
+ *    a contemporaneous stock↔inflation correlation: `zₜ = ρ·zₜ₋₁ + √(1−ρ²)·εₜ`
+ *    with `corr(εStock, εInfl) = correlation` via Cholesky. This is what makes
+ *    sequence-of-returns risk real, and it exists even when the band is a point.
+ *
+ * The band is read as a CAGR (compounded) band: the arithmetic per-year mean gets
+ * `+σ²/2` volatility-drag compensation so the median realized CAGR of a run
+ * matches its drawn long-run average rather than sitting ~σ²/2 below it.
+ *
+ * Draws are clamped (`RATE_CLAMP`) so a tail draw can never reach −100% (which
+ * would NaN the monthly-rate conversion).
  */
 export function buildRateSchedule(
   segments: RateSegment[],
@@ -313,23 +365,51 @@ export function buildRateSchedule(
   rng: () => number,
   persistence: RatePersistence = DEFAULT_PERSISTENCE,
   correlation: number = DEFAULT_RATE_CORRELATION,
+  annualVol: AnnualVolatility = ANNUAL_VOLATILITY,
 ): SampledRates[] {
   const schedule: SampledRates[] = new Array(years)
+  // Epistemic draws: one per stream per run, independent of the yearly shocks.
+  const zMeanStock = boxMullerNormal(0, 1, rng)
+  const zMeanInfl = boxMullerNormal(0, 1, rng)
+  const zMeanBond = boxMullerNormal(0, 1, rng)
+  // Volatility-drag compensation: median(∏(1+r)) ≈ (1 + mean − σ²/2)ⁿ, so add
+  // σ²/2 to the arithmetic mean to make the band read as compounded growth.
+  const stockDrag = annualVol.stock ** 2 / 2
+  const inflDrag = annualVol.inflation ** 2 / 2
+  const bondDrag = annualVol.bond ** 2 / 2
   const kStock = Math.sqrt(1 - persistence.stock ** 2)
   const kInfl = Math.sqrt(1 - persistence.inflation ** 2)
+  const kBond = Math.sqrt(1 - persistence.bond ** 2)
   const cInfl = Math.sqrt(1 - correlation ** 2)
+  const clamp = (v: number, b: { min: number; max: number }) =>
+    Math.min(b.max, Math.max(b.min, v))
   let zStock = 0
   let zInfl = 0
+  let zBond = 0
   for (let y = 0; y < years; y++) {
     // Jointly-distributed standard-normal innovations with corr = `correlation`.
+    // Bond innovations are drawn independently (a documented simplification —
+    // historically bonds correlate weakly and unstably with both streams).
     const eStock = boxMullerNormal(0, 1, rng)
     const eInfl = correlation * eStock + cInfl * boxMullerNormal(0, 1, rng)
+    const eBond = boxMullerNormal(0, 1, rng)
     zStock = y === 0 ? eStock : persistence.stock * zStock + kStock * eStock
     zInfl = y === 0 ? eInfl : persistence.inflation * zInfl + kInfl * eInfl
+    zBond = y === 0 ? eBond : persistence.bond * zBond + kBond * eBond
     const seg = activeSegment(segments, startAge + y)
     schedule[y] = {
-      stockGrowth: seg.growthMean + seg.growthSigma * zStock,
-      inflation: seg.inflationMean + seg.inflationSigma * zInfl,
+      stockGrowth: clamp(
+        seg.growthMean + seg.growthSigma * zMeanStock + stockDrag + annualVol.stock * zStock,
+        RATE_CLAMP.stock,
+      ),
+      inflation: clamp(
+        seg.inflationMean + seg.inflationSigma * zMeanInfl + inflDrag + annualVol.inflation * zInfl,
+        RATE_CLAMP.inflation,
+      ),
+      bondGrowth: clamp(
+        seg.bondMean + seg.bondSigma * zMeanBond + bondDrag + annualVol.bond * zBond,
+        RATE_CLAMP.bond,
+      ),
     }
   }
   return schedule
@@ -341,12 +421,19 @@ export function buildRateSchedule(
  * each breakpoint supersedes earlier ones from its `startAge` onward.
  */
 export function buildSegments(inputs: SimulationInputs): RateSegment[] {
+  // Bond band is global (not per breakpoint); defaults when the inputs omit it.
+  const bondMin = inputs.bondGrowthMin ?? DEFAULT_BOND_BAND.min
+  const bondMax = inputs.bondGrowthMax ?? DEFAULT_BOND_BAND.max
+  const bondMean = p10p90ToMean(bondMin, bondMax)
+  const bondSigma = p10p90ToSigma(bondMin, bondMax)
   const initial: RateSegment = {
     startAge: inputs.person.currentAge,
     growthMean: p10p90ToMean(inputs.initialStockGrowthMin, inputs.initialStockGrowthMax),
     growthSigma: p10p90ToSigma(inputs.initialStockGrowthMin, inputs.initialStockGrowthMax),
     inflationMean: p10p90ToMean(inputs.initialInflationMin, inputs.initialInflationMax),
     inflationSigma: p10p90ToSigma(inputs.initialInflationMin, inputs.initialInflationMax),
+    bondMean,
+    bondSigma,
   }
   const breakpointSegments = inputs.breakpoints.map((bp) => ({
     startAge: bp.startAge,
@@ -354,6 +441,8 @@ export function buildSegments(inputs: SimulationInputs): RateSegment[] {
     growthSigma: p10p90ToSigma(bp.stockGrowthMin, bp.stockGrowthMax),
     inflationMean: p10p90ToMean(bp.inflationMin, bp.inflationMax),
     inflationSigma: p10p90ToSigma(bp.inflationMin, bp.inflationMax),
+    bondMean,
+    bondSigma,
   }))
   return [initial, ...breakpointSegments].sort((a, b) => a.startAge - b.startAge)
 }

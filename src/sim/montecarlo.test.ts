@@ -53,8 +53,8 @@ describe('runMonteCarlo — seed determinism', () => {
   })
 })
 
-describe('runMonteCarlo — sigma=0 case', () => {
-  it('zero variance inputs → all runs identical → p10 = p50 = p90', () => {
+describe('runMonteCarlo — degenerate user band (min = max)', () => {
+  it('still produces market risk: a known average does not mean a known path', () => {
     const inp = inputs({
       person: { ...defaultInputs().person, currentAge: 60, maxAge: 80 },
       accounts: [{ ...RICH_ACCOUNT }],
@@ -64,13 +64,26 @@ describe('runMonteCarlo — sigma=0 case', () => {
       initialInflationMin: 0.03,
       initialInflationMax: 0.03,
     })
-    const result = runMonteCarlo(inp, 50, 42)
-    // With zero variance, all runs are identical
-    expect(result.successRate).toBe(1)
-    // p10/p50/p90 should be equal (same value from all runs)
+    const result = runMonteCarlo(inp, 200, 42)
+    // Year-to-year volatility exists even with a pinned long-run average, so the
+    // fan must have genuine spread (the old behavior collapsed p10 = p90).
     const lastYr = result.yearlyResults.at(-1)!
-    expect(lastYr.p10).toBeCloseTo(lastYr.p50, 0)
-    expect(lastYr.p50).toBeCloseTo(lastYr.p90, 0)
+    expect(lastYr.p90).toBeGreaterThan(lastYr.p10 * 1.2)
+  })
+
+  it('sampled yearly returns include negative years at a realistic frequency', () => {
+    const inp = inputs({
+      person: { ...defaultInputs().person, currentAge: 60, maxAge: 90 },
+      accounts: [{ ...RICH_ACCOUNT }],
+      annualExpenses: 60000,
+    })
+    const result = runMonteCarlo(inp, 100, 42, undefined, 100)
+    const all: number[] = []
+    for (const p of result.samplePaths) for (const r of p.returns ?? []) all.push(r)
+    const negFrac = all.filter((r) => r < 0).length / all.length
+    // The app's own historical series has ~26% negative years.
+    expect(negFrac).toBeGreaterThan(0.15)
+    expect(negFrac).toBeLessThan(0.4)
   })
 })
 
@@ -267,6 +280,17 @@ describe('runMonteCarlo — guardrails (#11)', () => {
     const flat = runMonteCarlo(plan('flat'), 400, 42)
     const guard = runMonteCarlo(plan('guardrails'), 400, 42)
     expect(guard.successRate).toBeGreaterThan(flat.successRate)
+  })
+
+  it('exposes the P10 spending floor so guardrails success cannot hide deep cuts', () => {
+    const guard = runMonteCarlo(plan('guardrails'), 400, 42)
+    // At a straining spend, the worst tenth of futures must have cut spending.
+    expect(guard.spendFloorP10).toBeDefined()
+    expect(guard.spendFloorP10!).toBeLessThan(1)
+    expect(guard.spendFloorP10!).toBeGreaterThan(0)
+
+    const flat = runMonteCarlo(plan('flat'), 100, 42)
+    expect(flat.spendFloorP10).toBe(1)
   })
 })
 

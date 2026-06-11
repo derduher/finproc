@@ -28,6 +28,28 @@ function readMoney(input: HTMLInputElement): number {
   return Number(input.value.replace(/,/g, '')) || 0
 }
 
+describe('PipeEditor — stock allocation input', () => {
+  it('renders a stock-allocation input defaulting to 100%', () => {
+    render(<PipeEditor account={makeAccount()} annualSalary={120_000} onChange={vi.fn()} onDelete={() => {}} />)
+    const input = screen.getByLabelText(/stock allocation/i) as HTMLInputElement
+    expect(input.value).toBe('100')
+  })
+
+  it('shows the account allocation when set', () => {
+    render(<PipeEditor account={makeAccount({ stockAllocation: 0.6 })} annualSalary={120_000} onChange={vi.fn()} onDelete={() => {}} />)
+    const input = screen.getByLabelText(/stock allocation/i) as HTMLInputElement
+    expect(input.value).toBe('60')
+  })
+
+  it('changing the allocation calls onChange with a 0–1 fraction', () => {
+    const onChange = vi.fn()
+    render(<PipeEditor account={makeAccount()} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
+    const input = screen.getByLabelText(/stock allocation/i) as HTMLInputElement
+    fireEvent.change(input, { target: { value: '40' } })
+    expect(onChange).toHaveBeenCalledWith({ stockAllocation: 0.4 })
+  })
+})
+
 describe('PipeEditor — balance input', () => {
   it('renders a balance input with the current account balance', () => {
     const onChange = vi.fn()

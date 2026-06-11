@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import { Seg } from '../shared/Field'
-import { HISTORICAL_MARKET_DEFAULTS } from '../../schema'
+import { HISTORICAL_MARKET_DEFAULTS, DEFAULT_BOND_BAND } from '../../schema'
 import type { Breakpoint } from '../../schema'
 
 type Series = 'growth' | 'inflation' | 'both'
@@ -459,6 +459,37 @@ export function MarketsStep() {
         </button>
       </div>
 
+      {/* Global bond return band: applies to the non-stock fraction of any
+          account with a stock allocation below 100% (set per account on step 2). */}
+      <div className="card" style={{ padding: 16, marginTop: 16 }}>
+        <div className="label" style={{ marginBottom: 6 }}>bond returns · P10–P90</div>
+        <div className="field-row" style={{ marginTop: 4 }}>
+          <input
+            type="number"
+            className="field field-num"
+            step="0.5"
+            style={{ width: 64, padding: '0 8px', height: 30 }}
+            value={((inputs.bondGrowthMin ?? DEFAULT_BOND_BAND.min) * 100).toFixed(1)}
+            onChange={(e) => patchInputs({ bondGrowthMin: Number(e.target.value) / 100 })}
+            aria-label="Bond growth P10"
+          />
+          <span className="muted">–</span>
+          <input
+            type="number"
+            className="field field-num"
+            step="0.5"
+            style={{ width: 64, padding: '0 8px', height: 30 }}
+            value={((inputs.bondGrowthMax ?? DEFAULT_BOND_BAND.max) * 100).toFixed(1)}
+            onChange={(e) => patchInputs({ bondGrowthMax: Number(e.target.value) / 100 })}
+            aria-label="Bond growth P90"
+          />
+          <span className="muted" style={{ fontSize: 12 }}>%</span>
+        </div>
+        <div className="micro" style={{ marginTop: 6, color: 'var(--ink-3)' }}>
+          Long-run average for the bond side of any account that isn&apos;t 100% stocks. One band for the whole plan (not per segment). Historical stress tests replay actual bond history alongside stocks; this band drives the Monte Carlo and the years outside the replayed window.
+        </div>
+      </div>
+
       <div
         className="card card-sunk"
         style={{
@@ -476,8 +507,8 @@ export function MarketsStep() {
           <path d="M7 4 V 8 M7 9.6 V 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
         </svg>
         <div>
-          <b style={{ color: 'var(--ink-2)', fontWeight: 500 }}>Monte Carlo simplification.</b>{' '}
-          We sample one draw of growth and inflation per segment per run (not per year), and treat them as independent. Historically they're slightly negatively correlated.
+          <b style={{ color: 'var(--ink-2)', fontWeight: 500 }}>How the band is used.</b>{' '}
+          Your P10–P90 band describes the plausible <em>long-run average</em> — each simulated future draws one average from it. Year-to-year market swings (≈17%/yr for stocks, ≈2.5%/yr for inflation, matching history) are layered on top, with sticky inflation and a stagflation-style negative link between high inflation and stock returns.
         </div>
       </div>
     </div>

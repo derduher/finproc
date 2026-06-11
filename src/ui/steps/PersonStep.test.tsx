@@ -38,7 +38,7 @@ describe('PersonStep — design copy', () => {
 })
 
 describe('PersonStep — fields', () => {
-  it('renders all seven fields (incl. retirement age)', () => {
+  it('renders all six fields (incl. retirement age and filing status)', () => {
     render(<PersonStep />)
     // Use IDs to target the inputs specifically and avoid matching tooltips
     expect(document.getElementById('current-age')).not.toBeNull()
@@ -46,8 +46,18 @@ describe('PersonStep — fields', () => {
     expect(document.getElementById('planning-to-age')).not.toBeNull()
     expect(document.getElementById('annual-salary')).not.toBeNull()
     expect(document.getElementById('salary-growth')).not.toBeNull()
-    expect(document.getElementById('marginal-tax')).not.toBeNull()
-    expect(document.getElementById('ltcg-rate')).not.toBeNull()
+    expect(document.getElementById('filing-status')).not.toBeNull()
+    // The flat marginal/LTCG rate inputs are gone: the engine computes taxes
+    // from progressive brackets + filing status, so those controls would be dead.
+    expect(document.getElementById('marginal-tax')).toBeNull()
+    expect(document.getElementById('ltcg-rate')).toBeNull()
+  })
+
+  it('filing status select updates the store', () => {
+    render(<PersonStep />)
+    const select = document.getElementById('filing-status') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'married' } })
+    expect(useStore.getState().inputs.person.filingStatus).toBe('married')
   })
 
   it('current age input updates the store', () => {

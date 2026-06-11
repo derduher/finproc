@@ -178,6 +178,30 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
             />
           </div>
 
+          <div>
+            <label htmlFor={`stock-alloc-${account.id}`} className="label" style={{ display: 'block', marginBottom: 6 }}>
+              stock allocation
+            </label>
+            <input
+              id={`stock-alloc-${account.id}`}
+              aria-label="Stock allocation"
+              className="field field-num"
+              type="number"
+              min={0}
+              max={100}
+              step={5}
+              style={{ width: 90 }}
+              value={Math.round((account.stockAllocation ?? 1) * 100)}
+              onChange={(e) => {
+                const pct = Math.min(100, Math.max(0, Number(e.target.value) || 0))
+                onChange({ stockAllocation: pct / 100 })
+              }}
+            />
+            <div className="micro" style={{ marginTop: 4, color: 'var(--ink-3)' }}>
+              % in stocks — the rest grows at the bond rate (set on the markets step)
+            </div>
+          </div>
+
           {account.type === 'taxable' && (
             <div className="micro" style={{ color: 'var(--ink-3)' }}>
               Taxable gains are assumed to be sold at the long-term capital-gains rate, so there&apos;s no cost basis to enter.
