@@ -31,6 +31,9 @@ export interface SamplePath {
   raiseYears: number[]
   /**
    * Per-year nominal stock return drawn for this run, aligned to `balances`.
+   * NOTE: this is the raw STOCK stream, not the account-blended portfolio
+   * return — a 60/40 plan's actual portfolio moves less than these numbers.
+   * Label it as market/stock returns in any UI, not "your returns".
    * Optional: only populated for sampled runs; absent on legacy cached results
    * and on hand-built test fixtures.
    */

@@ -32,8 +32,8 @@ export function buildFirstRunInputs(a: {
       retirementAge: a.retireAge,
       maxAge: 95,
       annualSalary: salary,
-      marginalTaxRate: 0.24,
-      ltcgRate: 0.15,
+      // marginalTaxRate/ltcgRate come from defaultInputs(); the engine computes
+      // taxes from progressive brackets + filingStatus and no longer reads them.
     },
     accounts: [
       {

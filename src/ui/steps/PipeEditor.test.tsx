@@ -48,6 +48,14 @@ describe('PipeEditor — stock allocation input', () => {
     fireEvent.change(input, { target: { value: '40' } })
     expect(onChange).toHaveBeenCalledWith({ stockAllocation: 0.4 })
   })
+
+  it('clearing the field does not snap the allocation to 0% stocks', () => {
+    const onChange = vi.fn()
+    render(<PipeEditor account={makeAccount({ stockAllocation: 0.6 })} annualSalary={120_000} onChange={onChange} onDelete={() => {}} />)
+    const input = screen.getByLabelText(/stock allocation/i) as HTMLInputElement
+    fireEvent.change(input, { target: { value: '' } })
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })
 
 describe('PipeEditor — balance input', () => {

@@ -193,6 +193,9 @@ export function PipeEditor({ account, annualSalary, onChange, onDelete }: Props)
               style={{ width: 90 }}
               value={Math.round((account.stockAllocation ?? 1) * 100)}
               onChange={(e) => {
+                // Ignore a transiently empty field — snapping it to 0% stocks
+                // would silently flip the account to all bonds mid-edit.
+                if (e.target.value === '') return
                 const pct = Math.min(100, Math.max(0, Number(e.target.value) || 0))
                 onChange({ stockAllocation: pct / 100 })
               }}
