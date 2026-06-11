@@ -8,6 +8,7 @@
  */
 import { runMonteCarlo } from './montecarlo'
 import { withRetirementAge } from './retirementAge'
+import { DEFAULT_BOND_BAND } from '../schema'
 import type { SimulationInputs } from '../schema'
 import type { SensitivityResult } from '../schema'
 
@@ -23,6 +24,11 @@ interface Perturbation {
 
 function clampRate(v: number): number {
   return Math.max(-0.99, Math.min(3, v))
+}
+
+/** True when any account holds a non-stock fraction (bond band is in play). */
+function hasBondExposure(inp: SimulationInputs): boolean {
+  return inp.accounts.some((a) => (a.stockAllocation ?? 1) < 1)
 }
 
 const PERTURBATIONS: Perturbation[] = [
@@ -45,6 +51,30 @@ const PERTURBATIONS: Perturbation[] = [
       initialStockGrowthMin: clampRate(inp.initialStockGrowthMin * (1 + DELTA)),
       initialStockGrowthMax: clampRate(inp.initialStockGrowthMax * (1 + DELTA)),
     }),
+  },
+  {
+    // Bond band perturbation — only meaningful when some account actually holds
+    // bonds. For an all-stock plan the band is unused, so applying no change
+    // lets the JSON-equality skip below avoid two wasted MC reruns (the row
+    // still appears, with zero deltas).
+    label: 'Bond returns',
+    sub: '±20%',
+    applyLo: (inp) =>
+      hasBondExposure(inp)
+        ? {
+            ...inp,
+            bondGrowthMin: clampRate((inp.bondGrowthMin ?? DEFAULT_BOND_BAND.min) * (1 - DELTA)),
+            bondGrowthMax: clampRate((inp.bondGrowthMax ?? DEFAULT_BOND_BAND.max) * (1 - DELTA)),
+          }
+        : inp,
+    applyHi: (inp) =>
+      hasBondExposure(inp)
+        ? {
+            ...inp,
+            bondGrowthMin: clampRate((inp.bondGrowthMin ?? DEFAULT_BOND_BAND.min) * (1 + DELTA)),
+            bondGrowthMax: clampRate((inp.bondGrowthMax ?? DEFAULT_BOND_BAND.max) * (1 + DELTA)),
+          }
+        : inp,
   },
   {
     label: 'Inflation',

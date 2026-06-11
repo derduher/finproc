@@ -7,6 +7,7 @@ import {
   boxMullerNormal,
   percentile,
   rmdDivisor,
+  rmdStartAge,
   taxableWithdrawalGrossUp,
   traditionalWithdrawalGrossUp,
   formatMoneyAbbreviated,
@@ -121,6 +122,17 @@ describe('percentile', () => {
     const samples = Array.from({ length: 1000 }, () => boxMullerNormal(100, 15, rng))
     expect(percentile(samples, 10)).toBeLessThan(100)
     expect(percentile(samples, 90)).toBeGreaterThan(100)
+  })
+})
+
+describe('rmdStartAge — SECURE 2.0 birth cohorts', () => {
+  it('returns 73 for people born before 1960 (already near RMD age)', () => {
+    expect(rmdStartAge(70)).toBe(73) // born ~1956
+  })
+
+  it('returns 75 for people born 1960 or later', () => {
+    expect(rmdStartAge(40)).toBe(75) // born ~1986
+    expect(rmdStartAge(32)).toBe(75)
   })
 })
 

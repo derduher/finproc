@@ -7,6 +7,7 @@ import {
   SimulationInputsSchema,
   WithdrawalStrategy,
   defaultInputs,
+  DEFAULT_BOND_BAND,
 } from './index'
 
 describe('AccountSchema — accountSubtype + contributeMax', () => {
@@ -174,6 +175,46 @@ describe('AccountSchema', () => {
       withdrawalStartAge: 59,
     })
     expect(result.success).toBe(false)
+  })
+
+  it('accepts a stockAllocation between 0 and 1 (and rejects out-of-range)', () => {
+    const base = {
+      id: 'acc-1',
+      name: 'Mixed',
+      type: 'taxable',
+      balance: 1000,
+      contributionAmount: 0,
+      contributionType: 'flat',
+      contributionFrequency: 'monthly',
+      contributionEndAge: 62,
+      withdrawalStartAge: 59,
+    }
+    expect(AccountSchema.safeParse({ ...base, stockAllocation: 0.6 }).success).toBe(true)
+    expect(AccountSchema.safeParse({ ...base, stockAllocation: 0 }).success).toBe(true)
+    expect(AccountSchema.safeParse({ ...base, stockAllocation: 1.5 }).success).toBe(false)
+    // Optional for back-compat with URLs that predate the field.
+    expect(AccountSchema.safeParse(base).success).toBe(true)
+  })
+})
+
+describe('SimulationInputsSchema — bond return band', () => {
+  it('accepts optional bondGrowthMin/Max and old inputs without them', () => {
+    const base = defaultInputs()
+    expect(SimulationInputsSchema.safeParse(base).success).toBe(true)
+    expect(
+      SimulationInputsSchema.safeParse({ ...base, bondGrowthMin: 0.01, bondGrowthMax: 0.06 })
+        .success,
+    ).toBe(true)
+    expect(
+      SimulationInputsSchema.safeParse({ ...base, bondGrowthMin: 0.06, bondGrowthMax: 0.01 })
+        .success,
+    ).toBe(false)
+  })
+
+  it('exposes a default bond band for the engine and UI', () => {
+    expect(DEFAULT_BOND_BAND.min).toBeLessThan(DEFAULT_BOND_BAND.max)
+    expect(DEFAULT_BOND_BAND.min).toBeGreaterThan(-0.05)
+    expect(DEFAULT_BOND_BAND.max).toBeLessThan(0.12)
   })
 })
 

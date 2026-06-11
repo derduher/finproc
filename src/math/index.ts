@@ -180,6 +180,23 @@ export function rmdDivisor(age: number): number | undefined {
   return RMD_TABLE[age] ?? 1.0
 }
 
+/**
+ * Calendar year assumed for "today" (age = currentAge) when a rule needs a birth
+ * year. The simulation itself is ageless; this only gates cohort rules like the
+ * SECURE 2.0 RMD start age.
+ */
+export const ASSUMED_SIM_START_YEAR = 2026
+
+/**
+ * RMD start age by birth cohort (SECURE 2.0 Act): 73 for those born before 1960,
+ * 75 for 1960 and later. Birth year is derived from the person's current age and
+ * {@link ASSUMED_SIM_START_YEAR}.
+ */
+export function rmdStartAge(currentAge: number): 73 | 75 {
+  const birthYear = ASSUMED_SIM_START_YEAR - currentAge
+  return birthYear >= 1960 ? 75 : 73
+}
+
 // ─── Tax gross-ups ────────────────────────────────────────────────────────────
 
 /**

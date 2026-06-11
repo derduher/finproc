@@ -9,6 +9,7 @@
  * or bumped retirement age) — these use a small `runCount` for speed.
  */
 import { runMonteCarlo } from './montecarlo'
+import { withRetirementAge } from './retirementAge'
 import { monteCarloDeltaSignificant } from '../math'
 import { WithdrawalStrategy } from '../schema'
 import type { SimulationInputs } from '../schema'
@@ -41,8 +42,8 @@ type Rule = (
 ) => Insight | null
 
 function effectiveRetireAge(inputs: SimulationInputs): number {
-  if (inputs.accounts.length === 0) return inputs.person.currentAge
-  return Math.max(...inputs.accounts.map((a) => a.contributionEndAge))
+  // person.retirementAge is the engine's single retirement definition.
+  return inputs.person.retirementAge
 }
 
 const taxOptimalRule: Rule = (inputs, baseline, runCount) => {
@@ -82,13 +83,12 @@ const healthcareGapRule: Rule = (inputs) => {
 const retireOneYearLaterRule: Rule = (inputs, baseline, runCount) => {
   if (baseline.successRate >= 0.995) return null
   if (inputs.accounts.length === 0) return null
-  const bumped = {
-    ...inputs,
-    accounts: inputs.accounts.map((a) => ({
-      ...a,
-      contributionEndAge: Math.min(a.contributionEndAge + 1, inputs.person.maxAge - 1),
-    })),
-  }
+  // Bump the actual retirement age (salary + contribution gates together) —
+  // bumping contributionEndAge alone wouldn't extend the paycheck.
+  const bumped = withRetirementAge(
+    inputs,
+    Math.min(inputs.person.retirementAge + 1, inputs.person.maxAge - 1),
+  )
   const alt = runMonteCarlo(bumped, runCount, inputs.seed)
   // Suppress noise-level deltas (bug #6): require statistical significance.
   if (!monteCarloDeltaSignificant(baseline.successRate, alt.successRate, runCount)) return null

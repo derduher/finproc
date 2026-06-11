@@ -13,6 +13,15 @@
 
 export type FilingStatus = 'single' | 'married'
 
+/**
+ * Combined employee FICA rate (6.2% Social Security + 1.45% Medicare), applied
+ * to gross wages during working years. Simplifications: the SS wage-base cap
+ * (~$176k, 2025) and the 0.9% additional Medicare tax are not modeled — slightly
+ * conservative for high earners. 401(k) deferrals are FICA-taxable, so FICA is
+ * charged on gross salary, not salary net of pre-tax contributions.
+ */
+export const FICA_RATE = 0.0765
+
 /** A marginal bracket: `rate` applies to taxable income up to `upTo`. */
 interface Bracket {
   upTo: number
@@ -90,14 +99,21 @@ export function ordinaryTax(grossOrdinary: number, fs: FilingStatus): number {
  * `otherIncome` is all other income counted toward provisional income (ordinary
  * withdrawals + realized gains). Returns the dollars of SS added to ordinary
  * income (0–85% of the benefit).
+ *
+ * Unlike the brackets and standard deduction, the provisional-income bases are
+ * fixed NOMINAL in law (unchanged since 1983/1993) — they shrink in real terms as
+ * prices rise. All arguments here are in today's dollars, so the bases are
+ * divided by `priceLevel` (cumulative inflation since the simulation start).
  */
 export function taxableSocialSecurity(
   ssBenefit: number,
   otherIncome: number,
   fs: FilingStatus,
+  priceLevel: number = 1,
 ): number {
   if (ssBenefit <= 0) return 0
-  const { base1, base2 } = SS_BASES[fs]
+  const base1 = SS_BASES[fs].base1 / priceLevel
+  const base2 = SS_BASES[fs].base2 / priceLevel
   const provisional = otherIncome + 0.5 * ssBenefit
   if (provisional <= base1) return 0
   if (provisional <= base2) {
@@ -136,14 +152,34 @@ function bisectGross(net: number, netOf: (gross: number) => number): number {
 }
 
 /**
+ * Age before which traditional-account withdrawals incur the 10% additional tax
+ * (integer-year proxy for the statutory 59½). Exceptions — rule of 55, SEPP/72(t),
+ * hardship carve-outs — are not modeled, which is mildly conservative for early
+ * retirees who would qualify.
+ */
+export const EARLY_WITHDRAWAL_AGE = 60
+
+/** The 10% additional tax on early distributions. */
+export const EARLY_WITHDRAWAL_PENALTY = 0.1
+
+/**
  * Gross ordinary withdrawal needed to net `net` after tax, given `stacked`
  * ordinary income already realized this year (so the new dollars are taxed at the
- * correct marginal position, after the deduction is consumed).
+ * correct marginal position, after the deduction is consumed). `penaltyRate`
+ * adds a flat additional tax on the gross (the 10% early-distribution penalty).
  */
-export function grossUpOrdinary(net: number, stacked: number, fs: FilingStatus): number {
+export function grossUpOrdinary(
+  net: number,
+  stacked: number,
+  fs: FilingStatus,
+  penaltyRate: number = 0,
+): number {
   if (net <= 0) return 0
   const baseTax = ordinaryTax(stacked, fs)
-  return bisectGross(net, (gross) => gross - (ordinaryTax(stacked + gross, fs) - baseTax))
+  return bisectGross(
+    net,
+    (gross) => gross - (ordinaryTax(stacked + gross, fs) - baseTax) - penaltyRate * gross,
+  )
 }
 
 /**

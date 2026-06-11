@@ -60,18 +60,29 @@ URL (?s=… &u=…)
 - **Multi-segment breakpoints** — `inputs.segments: Array<{ startAge, stockGrowthMin, stockGrowthMax, inflationMin, inflationMax }>`. Replaces the old single-segment fields. Default: one segment from `currentAge`. `runMonteCarlo` picks the segment whose `startAge ≤ age < nextStartAge`.
 - **Cost basis** — `Account.costBasis?: number`. Optional initial cost-basis for taxable accounts.
 - **Aggregated cashflow series** — `MonteCarloResult.yearlyResults` rows include `contributionsMedian`, `socialSecurityMedian`, `withdrawalsMedian` (median across runs). Used by `HiCashflow`.
+- **Bond asset class** — `Account.stockAllocation?: number` (0–1, omitted = 100% stocks) blends each account's monthly growth between the stock and bond rate streams. `inputs.bondGrowthMin/Max` is a single global P10–P90 band (`DEFAULT_BOND_BAND` = 2–6% when omitted), not per breakpoint. Historical stress tests replay all three streams (`HISTORICAL_SERIES` carries 10-year Treasury total returns); the band drives the Monte Carlo and years outside the replayed window.
+- **Guardrails spending floor** — `ProjectionResult.minSpendMultiplier` (lowest spend level reached per run) and `MonteCarloResult.spendFloorP10` (P10 across runs). ResultsStep shows the floor under the guardrails policy so a "success" that survived by cutting spending is visible.
 - **Worker progress events** — `simulate(inputs, onProgress?)` emits `{ stage: 'parse'|'sample'|'project'|'aggregate', done: number, total: number }`. `useSimulation` exposes `progress` to the loading UI. In tests, the direct import path accepts `onProgress = undefined`.
 
 ### Simulation internals
 
-- **`SimAccount`** tracks `balance` and `costBasis` separately. Contributions are gated by `contributionEndAge`; withdrawals by `withdrawalStartAge`. RMDs apply at age 73+ using IRS Uniform Lifetime divisors. `zero()` is called when the projection flags depletion.
+- **`SimAccount`** tracks `balance` and `costBasis` separately. Contributions are gated by `contributionEndAge` (clamped to `person.retirementAge` by the projection); withdrawals by `withdrawalStartAge`. Flat contribution amounts and flat employer matches are in today's dollars — indexed by the realized price level. `zero()` is called when the projection flags depletion.
+- **`person.retirementAge` is the single retirement definition**: salary stops there, contributions can't outlive the paycheck (`contributionEndAge` is clamped to it), and the solvers/insights bump it via `withRetirementAge` so all gates move together.
+- **Rate sampling (`buildRateSchedule`)** has two layers with distinct meanings:
+  - **Epistemic (per run)**: the user's P10–P90 band is uncertainty about the *long-run average*; one standardized draw per stream per run shifts the whole run's mean. A pessimistic run is pessimistic in every segment (shared draw, scaled by each segment's sigma).
+  - **Market (per year)**: calibrated `ANNUAL_VOLATILITY` (stock 17%, inflation 2.5%, bond 7% — matched to the app's own 1928–2023 series) with AR(1) persistence (`DEFAULT_PERSISTENCE`) and a negative stock↔inflation correlation (`DEFAULT_RATE_CORRELATION`). This is what makes sequence-of-returns risk real; it exists even when the band is a point (min = max).
+  - The band reads as CAGR: the arithmetic per-year mean gets `+σ²/2` volatility-drag compensation. Draws are clamped so a tail draw can never reach −100%.
 - **`runSingleProjection`** loops month-by-month.
-  - **Pre-retirement salary covers expenses**: while `currentAge < max(contributionEndAge)`, the simulation subtracts `salary × (1 - marginalRate) - contributions` from `netNeed`. Without this, a working person with locked retirement accounts would be falsely flagged depleted on day one.
+  - **Working-year taxes are progressive**: take-home = salary − pre-tax (traditional) contributions − progressive federal tax (same brackets as the withdrawal phase, in real dollars) − 7.65% FICA on gross. `person.marginalTaxRate`/`ltcgRate` remain in the schema for URL back-compat but the engine no longer reads them.
+  - **Surplus take-home is banked**: take-home (plus net SS) above the year's spending is deposited into a taxable account (the same cash sink that receives excess RMDs) and reported as contributions — an under-spender accumulates wealth instead of evaporating it.
+  - **Early-withdrawal penalty**: traditional draws before age 60 (integer-year proxy for 59½) pay the extra 10%, including in the gross-up. Roth is modeled penalty-free (basis-first simplification); rule-of-55/72(t) exceptions are not modeled.
+  - **SS provisional-income thresholds are fixed nominal** (as in law): the bases are divided by the realized price level, so real SS taxation creeps up under inflation while the brackets stay real-indexed.
+  - **RMDs** start at the cohort's age — 73, or 75 for those born 1960+ (`rmdStartAge`, assuming sim start 2026) — using IRS Uniform Lifetime divisors; net proceeds are reinvested in taxable.
   - **Depletion criterion**: depletion only fires when there's an actual unmet need *and* the total portfolio balance can't cover it. A withdrawal lockout (e.g. all accounts have `withdrawalStartAge > currentAge`) is treated as a silent shortfall, not depletion. Once depletion is flagged, all accounts are zeroed for the remainder of the projection (per spec §3.3) — `totalBalance` reads as 0 in every subsequent yearly result.
   - **Float epsilon**: depletion uses `shortfall > 0.01` and `totalAvailable < shortfall - 0.01` to avoid false positives from tax gross-up round-trips.
-- **`runMonteCarlo`** uses `mulberry32(seed)` PRNG; draws rates once per breakpoint segment per run via Box-Muller. A single-segment input starting at `currentAge` produces identical results to the old single-draw path (determinism pin).
+- **`runMonteCarlo`** uses `mulberry32(seed)` PRNG — same seed, bit-identical results. Insights/sensitivity reuse the seed (common random numbers) and gate claims with `monteCarloDeltaSignificant`.
 - **Withdrawal strategies**: `TaxOptimal` (taxable → traditional → Roth), `Proportional`, `UserDefined`.
-- **Insight rules** (`src/sim/insights.ts`): pure functions `(inputs, result) → InsightCard[]`. Current rules: tax-strategy delta, healthcare gap (62→65), "retire 1 year later" delta.
+- **Insight rules** (`src/sim/insights.ts`): pure functions `(inputs, result) → InsightCard[]`. Current rules: tax-strategy delta, healthcare gap (62→65), "retire 1 year later" delta (bumps `person.retirementAge` via `withRetirementAge`).
 
 ### UI shell (responsive)
 
@@ -88,7 +99,8 @@ URL (?s=… &u=…)
 - **No Recharts** — all charts (`HiFanChart`, `HiTornado`, `HiCashflow`) are hand-rolled SVG React components in `src/ui/charts/`.
 - **Coverage threshold**: 90% stmt/func/line, 89% branch — measured only for `src/{math,schema,sim,storage,hooks,store.ts}`. UI components are excluded.
 - **`simulate` in tests**: `src/worker/simulator.ts` exports `simulate` as a plain async function. Tests mock it with `vi.mock('../worker/simulator')` — no actual Worker is spawned.
-- **One RNG draw per segment per run**: `runMonteCarlo` draws rates for each segment at the start of each run via Box-Muller, consuming deterministic draws even for future segments. This preserves the determinism pin test.
+- **RNG draw order matters**: `buildRateSchedule` consumes three epistemic draws (stock, inflation, bond) at the start of each run, then three per-year draws. Changing the order changes every seeded result, so treat additions to the draw sequence as a breaking change for any pinned expectations.
+- **The user's market band is NOT per-year volatility**: segment sigmas from P10–P90 are epistemic (long-run average); per-year market noise is the separate `ANNUAL_VOLATILITY` constant. Never feed the band's sigma directly into yearly draws — that reproduces the old bug where a 4–10% band implied an asset that never has a down year.
 
 ## Original specification
 
@@ -99,7 +111,7 @@ The original product requirements and implementation plan are preserved in [`doc
 | Spec / Old Actual | Current |
 |---|---|
 | Recharts for charts | Raw SVG components (`HiFanChart`, `HiTornado`, `HiCashflow`) |
-| Real/nominal toggle transforms cached values | Nominal values stored; `displayMode` toggle is wired to chart labels but chart paths remain nominal |
+| Real/nominal toggle transforms cached values | Nominal values stored; `deflateResult` (`src/sim/displayMode.ts`) converts results to today's dollars at render time in ResultsStep / PreviewRail / MainScreen |
 | Scenario comparison overlay | Scenarios saved/loaded via `useScenarios`; "Branch scenario" button in ResultsStep footer; no side-by-side comparison view |
 | No worker progress events | `simulate(inputs, onProgress?)` emits 4-stage progress; `useSimulation` surfaces `progress` to `LoadingState` |
 | UI components not tested | React Testing Library tests added for non-presentational behavior (responsive layout, interactive charts, insight rules) |

@@ -22,6 +22,7 @@ const fakeResult: MonteCarloResult = {
     { fraction: 0.1, age: undefined },
     { fraction: 0.5, age: 84 },
   ],
+  spendFloorP10: 0.81,
   yearlyResults: Array.from({ length: 64 }, (_, i) => ({
     age: 32 + i,
     p10: Math.max(0, 300_000 + i * 5_000),
@@ -217,6 +218,22 @@ describe('ResultsStep — displayMode (nominal/real)', () => {
     })
     const { container } = render(<ResultsStep />)
     expect(container.textContent).toMatch(/real|today/i)
+  })
+})
+
+describe('ResultsStep — guardrails spending floor', () => {
+  it('shows the P10 spending floor when the guardrails policy is active', () => {
+    useStore.setState((s) => ({ inputs: { ...s.inputs, spendingPolicy: 'guardrails' as const } }))
+    render(<ResultsStep />)
+    expect(screen.getByText(/spending floor/i)).toBeInTheDocument()
+    // 0.81 floor → cut of about 19%.
+    expect(screen.getByText(/19%/)).toBeInTheDocument()
+  })
+
+  it('does not show a spending floor under the flat policy', () => {
+    useStore.setState((s) => ({ inputs: { ...s.inputs, spendingPolicy: 'flat' as const } }))
+    render(<ResultsStep />)
+    expect(screen.queryByText(/spending floor/i)).toBeNull()
   })
 })
 

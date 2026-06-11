@@ -105,6 +105,12 @@ export const AccountSchema = z.object({
    * Only effective when accountSubtype is '401k' or 'ira'.
    */
   contributeMax: z.boolean().optional(),
+  /**
+   * Fraction of this account held in stocks (the rest grows at the bond rate).
+   * Optional for back-compat with URLs that predate the field; omitted means
+   * 100% stocks (the original single-asset behavior).
+   */
+  stockAllocation: z.number().min(0).max(1).optional(),
 })
 
 export type Account = z.infer<typeof AccountSchema>
@@ -192,6 +198,15 @@ export const SimulationInputsSchema = z
     initialInflationMin: z.number().min(-1).max(1),
     initialInflationMax: z.number().min(-1).max(1),
 
+    /**
+     * Long-run bond return band (P10/P90, nominal), applied to the non-stock
+     * fraction of any account with `stockAllocation < 1`. Global (not per
+     * breakpoint segment). Optional for back-compat; defaults to
+     * {@link DEFAULT_BOND_BAND} when omitted.
+     */
+    bondGrowthMin: z.number().min(-1).max(1).optional(),
+    bondGrowthMax: z.number().min(-1).max(1).optional(),
+
     /** Additional breakpoints (sorted ascending by startAge) */
     breakpoints: z.array(BreakpointSchema),
 
@@ -244,6 +259,16 @@ export const SimulationInputsSchema = z
     message: 'initialInflationMax must be >= initialInflationMin',
     path: ['initialInflationMax'],
   })
+  .refine(
+    (s) =>
+      s.bondGrowthMin === undefined ||
+      s.bondGrowthMax === undefined ||
+      s.bondGrowthMax >= s.bondGrowthMin,
+    {
+      message: 'bondGrowthMax must be >= bondGrowthMin',
+      path: ['bondGrowthMax'],
+    },
+  )
   .refine(
     (s) => {
       const ages = s.breakpoints.map((b) => b.startAge)
@@ -318,6 +343,14 @@ export const HISTORICAL_MARKET_DEFAULTS = {
   inflationMin: -0.015,
   inflationMax: 0.0875,
 } as const
+
+/**
+ * Default long-run NOMINAL bond return band (P10/P90), used when the inputs
+ * omit `bondGrowthMin/Max`. Centered near the historical intermediate-Treasury
+ * average (~4%), with epistemic spread on the long-run mean — per-year bond
+ * volatility is layered on separately by the engine.
+ */
+export const DEFAULT_BOND_BAND = { min: 0.02, max: 0.06 } as const
 
 // ─── Default inputs ───────────────────────────────────────────────────────────
 export function defaultInputs(): SimulationInputs {

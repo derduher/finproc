@@ -222,6 +222,23 @@ export function ResultsStep() {
         </div>
       </div>
 
+      {/* Guardrails honesty note: a "success" that survived by cutting spending
+          should say so, not hide behind the headline rate. */}
+      {inputs.spendingPolicy === 'guardrails' &&
+        result.spendFloorP10 !== undefined &&
+        result.spendFloorP10 < 1 && (
+          <div
+            className="card card-sunk"
+            role="note"
+            style={{ padding: 14, marginBottom: 24, fontSize: 13, color: 'var(--ink-2)' }}
+          >
+            <b style={{ fontWeight: 500 }}>Guardrails spending floor:</b>{' '}
+            in the worst 1-in-10 futures, staying funded meant cutting spending by about{' '}
+            <span className="num">{Math.round((1 - result.spendFloorP10) * 100)}%</span> at the
+            lowest point. The success rate above counts those trimmed-spending runs as successes.
+          </div>
+        )}
+
       {/* ── Fan chart ── */}
       <div
         className="card"

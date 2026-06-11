@@ -31,6 +31,26 @@ describe('MarketsStep — design copy', () => {
   })
 })
 
+describe('MarketsStep — bond return band', () => {
+  it('renders bond P10/P90 inputs with the default band when unset', () => {
+    render(<MarketsStep />)
+    const lo = screen.getByLabelText(/bond growth p10/i) as HTMLInputElement
+    const hi = screen.getByLabelText(/bond growth p90/i) as HTMLInputElement
+    expect(Number(lo.value)).toBeCloseTo(2, 5)
+    expect(Number(hi.value)).toBeCloseTo(6, 5)
+  })
+
+  it('editing the bond band writes bondGrowthMin/Max to the store', () => {
+    render(<MarketsStep />)
+    const lo = screen.getByLabelText(/bond growth p10/i) as HTMLInputElement
+    fireEvent.change(lo, { target: { value: '1' } })
+    expect(useStore.getState().inputs.bondGrowthMin).toBeCloseTo(0.01, 6)
+    const hi = screen.getByLabelText(/bond growth p90/i) as HTMLInputElement
+    fireEvent.change(hi, { target: { value: '7' } })
+    expect(useStore.getState().inputs.bondGrowthMax).toBeCloseTo(0.07, 6)
+  })
+})
+
 describe('MarketsStep — breakpoints timeline', () => {
   it('renders the breakpoints timeline SVG', () => {
     render(<MarketsStep />)
@@ -133,9 +153,10 @@ describe('MarketsStep — historical defaults preset', () => {
   })
 })
 
-describe('MarketsStep — simplifications note', () => {
-  it('renders the Monte Carlo simplification note', () => {
+describe('MarketsStep — methodology note', () => {
+  it('explains that the band is a long-run average with per-year volatility on top', () => {
     render(<MarketsStep />)
-    expect(screen.getByText(/Monte Carlo simplification/i)).toBeInTheDocument()
+    expect(screen.getByText(/How the band is used/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/long-run average/i).length).toBeGreaterThan(0)
   })
 })

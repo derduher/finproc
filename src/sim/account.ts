@@ -54,6 +54,11 @@ export class SimAccount {
     return this.def.withdrawalStartAge
   }
 
+  /** Fraction held in stocks; the rest grows at the bond rate. Default 100%. */
+  get stockAllocation(): number {
+    return this.def.stockAllocation ?? 1
+  }
+
   // ─── Monthly growth ─────────────────────────────────────────────────────────
 
   /**
@@ -197,8 +202,11 @@ export class SimAccount {
       // contributionAmount is a fraction (e.g., 0.15 = 15%)
       return (contributionAmount * annualSalary) / 12
     }
-    // Flat: aggregate per-period payments into monthly
-    return contributionAmount * multiplier
+    // Flat: aggregate per-period payments into monthly. The amount is in
+    // today's dollars — index it by the cumulative price level, the way a real
+    // saver raises a fixed contribution with inflation. (Left nominal-flat, a
+    // 30-year $500/mo plan quietly halves in real terms.)
+    return contributionAmount * multiplier * colaFactor
   }
 
   private monthlyMatchAmount(annualSalary: number, currentAge: number = 0, colaFactor: number = 1): number {
@@ -213,7 +221,7 @@ export class SimAccount {
       return matchable * (match.matchPercent / 100)
     }
 
-    // Flat annual amount distributed monthly
-    return match.annualAmount / 12
+    // Flat annual amount distributed monthly, indexed like flat contributions.
+    return (match.annualAmount / 12) * colaFactor
   }
 }

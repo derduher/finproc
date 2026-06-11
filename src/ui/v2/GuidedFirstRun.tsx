@@ -32,8 +32,8 @@ export function buildFirstRunInputs(a: {
       retirementAge: a.retireAge,
       maxAge: 95,
       annualSalary: salary,
-      marginalTaxRate: 0.24,
-      ltcgRate: 0.15,
+      // marginalTaxRate/ltcgRate come from defaultInputs(); the engine computes
+      // taxes from progressive brackets + filingStatus and no longer reads them.
     },
     accounts: [
       {
@@ -156,7 +156,7 @@ export function GuidedFirstRun({ onComplete }: { onComplete: (inputs: Simulation
 
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 22, marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 12, color: 'var(--ink-3)', maxWidth: 380, lineHeight: 1.5 }}>
-              Defaults we'll assume: a 401(k) for your savings, historical returns, a flat tax estimate, Social Security at 67, tax-optimal withdrawals, plan to age 95. All editable.
+              Defaults we'll assume: a 401(k) for your savings, historical returns, federal tax brackets + FICA, Social Security at 67, tax-optimal withdrawals, plan to age 95. All editable.
             </div>
             <button className="btn btn-primary" style={{ height: 44, padding: '0 22px', fontSize: 15 }} onClick={submit}>
               Show my projection →

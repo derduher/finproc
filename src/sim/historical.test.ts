@@ -37,6 +37,15 @@ describe('HISTORICAL_SERIES', () => {
     // 1970s + 2022 high inflation.
     expect(by(1979).inflation).toBeGreaterThan(0.08)
     expect(by(2022).inflation).toBeGreaterThan(0.06)
+    // Bonds: 2022 was the worst 10-year Treasury year on record (−17.8%).
+    expect(by(2022).bond).toBeLessThan(-0.15)
+    // 1982 disinflation rally (+32.8%).
+    expect(by(1982).bond).toBeGreaterThan(0.3)
+    // 2008 flight to safety: bonds UP while stocks crashed.
+    expect(by(2008).bond).toBeGreaterThan(0.15)
+    // 1969 and 2009 were losing bond years.
+    expect(by(1969).bond).toBeLessThan(-0.04)
+    expect(by(2009).bond).toBeLessThan(-0.1)
   })
 
   it('keeps returns and inflation within sane bounds', () => {
@@ -45,6 +54,8 @@ describe('HISTORICAL_SERIES', () => {
       expect(r.stock).toBeLessThan(0.7)
       expect(r.inflation).toBeGreaterThan(-0.15)
       expect(r.inflation).toBeLessThan(0.25)
+      expect(r.bond).toBeGreaterThan(-0.25)
+      expect(r.bond).toBeLessThan(0.4)
     }
   })
 })
@@ -104,6 +115,30 @@ describe('buildHistoricalSchedule', () => {
     const schedule = buildHistoricalSchedule({ inputs, startYear: last, anchorAge: 65 })
     // The year right after the anchor has no history → expected mean, finite.
     expect(Number.isFinite(schedule[6].stockGrowth)).toBe(true)
+  })
+
+  it('replays historical bond returns alongside stocks', () => {
+    const schedule = buildHistoricalSchedule({ inputs, startYear: 2008, anchorAge: 65 })
+    const by = (y: number) => HISTORICAL_SERIES.find((r) => r.year === y)!
+    // anchorAge 65 → index 5 replays 2008: bonds rallied while stocks crashed.
+    expect(schedule[5].bondGrowth).toBeCloseTo(by(2008).bond, 6)
+    // Index 19 replays 2022: the historical bond crash, not the expected mean.
+    expect(schedule[19].bondGrowth).toBeCloseTo(by(2022).bond, 6)
+  })
+
+  it('uses the expected bond mean outside the historical window', () => {
+    const a = buildHistoricalSchedule({ inputs, startYear: 2008, anchorAge: 65 })
+    const b = buildHistoricalSchedule({ inputs, startYear: 1973, anchorAge: 65 })
+    // Pre-anchor years are crisis-independent (plan expected mean), and the
+    // expected mean differs from the replayed crisis-year bond returns.
+    expect(a[0].bondGrowth).toBeCloseTo(b[0].bondGrowth!, 10)
+    expect(Number.isFinite(a[0].bondGrowth)).toBe(true)
+    expect(a[5].bondGrowth).not.toBeCloseTo(a[0].bondGrowth!, 6)
+    // Post-data tail: starting at the last year, age 66+ has no history → finite mean.
+    const last = HISTORICAL_SERIES[HISTORICAL_SERIES.length - 1].year
+    const tail = buildHistoricalSchedule({ inputs, startYear: last, anchorAge: 65 })
+    expect(Number.isFinite(tail[6].bondGrowth)).toBe(true)
+    expect(tail[6].bondGrowth).toBeCloseTo(tail[0].bondGrowth!, 10)
   })
 })
 
