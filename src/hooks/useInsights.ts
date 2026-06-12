@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { insights } from '../worker/simulator'
+import { insights } from '../worker/client'
 import { useDebouncedValue } from './useDebouncedValue'
 import type { SimulationInputs } from '../schema'
 import type { Insight } from '../sim/insights'
