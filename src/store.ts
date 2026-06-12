@@ -10,8 +10,6 @@ export type Theme = 'light' | 'dark'
 export type Density = 'compact' | 'comfortable'
 
 export interface UiState {
-  /** Current wizard step index (0–5) */
-  activeStep: number
   /** Whether to display values in nominal or real (inflation-adjusted) dollars */
   displayMode: DisplayMode
   /** Visual aesthetic (warm editorial / cool trust / mono quant) */
@@ -40,7 +38,6 @@ export interface Store {
   /** Edit the aggregate spend; scales the breakdown proportionally to match. */
   setExpensesTotal: (total: number) => void
 
-  setActiveStep: (step: number) => void
   setDisplayMode: (mode: DisplayMode) => void
   setAesthetic: (aesthetic: Aesthetic) => void
   setTheme: (theme: Theme) => void
@@ -51,7 +48,6 @@ export interface Store {
 export const useStore = create<Store>((set) => ({
   inputs: defaultInputs(),
   ui: {
-    activeStep: 0,
     displayMode: 'nominal',
     aesthetic: 'warm',
     theme: 'light',
@@ -84,7 +80,6 @@ export const useStore = create<Store>((set) => ({
       return { inputs: { ...s.inputs, baselineExpenses: items, annualExpenses: sumExpenseItems(items) } }
     }),
 
-  setActiveStep: (activeStep) => set((s) => ({ ui: { ...s.ui, activeStep } })),
 
   setDisplayMode: (displayMode) => set((s) => ({ ui: { ...s.ui, displayMode } })),
 

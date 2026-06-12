@@ -12,11 +12,14 @@ import { runMonteCarlo } from '../sim/montecarlo'
 import { findSustainableSpend } from '../sim/spendSolver'
 import { findRetirementAgeForSuccess } from '../sim/retirementSolver'
 import { findRequiredExtraSavings } from '../sim/saveMoreSolver'
+import { runSensitivity } from '../sim/sensitivity'
+import { computeInsights } from '../sim/insights'
 import type { MonteCarloResult, ProgressCallback } from '../sim/montecarlo'
 import type { SustainableSpendResult } from '../sim/spendSolver'
 import type { RetirementSolveResult } from '../sim/retirementSolver'
 import type { SaveMoreResult } from '../sim/saveMoreSolver'
-import type { SimulationInputs } from '../schema'
+import type { Insight } from '../sim/insights'
+import type { SimulationInputs, SensitivityResult } from '../schema'
 
 export type { ProgressCallback, ProgressEvent } from '../sim/montecarlo'
 
@@ -78,12 +81,38 @@ export async function requiredExtraSavings(
   return findRequiredExtraSavings(inputs, targetSuccessRate, opts)
 }
 
+/**
+ * One-at-a-time ±20% sensitivity (the tornado). Runs `2 × perturbations + 1`
+ * Monte Carlo passes, so it lives off the main thread; the v1 wizard used to
+ * run this synchronously in render. Exported directly for testability.
+ */
+export async function sensitivity(
+  inputs: SimulationInputs,
+  runCount: number = 200,
+): Promise<SensitivityResult[]> {
+  return runSensitivity(inputs, runCount)
+}
+
+/**
+ * Rule-based insight cards. Recomputes the baseline at `runCount` in-worker
+ * (cheaper than structured-cloning a full MonteCarloResult across the Comlink
+ * boundary) so the comparative rules diff like against like at the same
+ * resolution. Exported directly for testability.
+ */
+export async function insights(
+  inputs: SimulationInputs,
+  runCount: number = 1000,
+): Promise<Insight[]> {
+  const baseline = runMonteCarlo(inputs, runCount, inputs.seed)
+  return computeInsights(inputs, baseline, { runCount })
+}
+
 // Comlink exposure — only runs in Worker context (not during tests).
 // The `typeof WorkerGlobalScope !== 'undefined'` guard prevents errors in jsdom.
 // Comlink exposure — only in Worker context
 try {
   if (typeof self !== 'undefined' && 'WorkerGlobalScope' in globalThis) {
-    expose({ simulate, sustainableSpend, earliestRetirementAge, requiredExtraSavings })
+    expose({ simulate, sustainableSpend, earliestRetirementAge, requiredExtraSavings, sensitivity, insights })
   }
 } catch {
   // Not in a worker context — this is fine for tests

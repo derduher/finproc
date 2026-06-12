@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { SustainableHero, RiskRead, SurplusRead, HoldChip } from './Outcomes'
+import { SustainableHero, RiskRead, SurplusRead, HoldChip, SpendFloorNote } from './Outcomes'
 import { deriveOutcomeReads } from '../../sim/outcome'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
@@ -74,5 +74,26 @@ describe('SurplusRead + HoldChip', () => {
     )
     expect(screen.getByText(/left .*unspent|unspent/i)).toBeInTheDocument()
     expect(screen.getByText(/97%/)).toBeInTheDocument()
+  })
+})
+
+describe('SpendFloorNote', () => {
+  it('shows the worst-1-in-10 spending cut when guardrails are active and the floor is below 1', () => {
+    render(<SpendFloorNote guardrails spendFloorP10={0.81} />)
+    expect(screen.getByText(/spending floor/i)).toBeInTheDocument()
+    // 0.81 floor → cut of about 19%.
+    expect(screen.getByText(/19%/)).toBeInTheDocument()
+  })
+
+  it('renders nothing under the flat policy', () => {
+    const { container } = render(<SpendFloorNote guardrails={false} spendFloorP10={0.81} />)
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('renders nothing when no run ever cut spending (floor = 1) or on legacy results', () => {
+    const a = render(<SpendFloorNote guardrails spendFloorP10={1} />)
+    expect(a.container).toBeEmptyDOMElement()
+    const b = render(<SpendFloorNote guardrails spendFloorP10={undefined} />)
+    expect(b.container).toBeEmptyDOMElement()
   })
 })

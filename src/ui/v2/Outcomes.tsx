@@ -173,3 +173,28 @@ export function HoldChip({ reads }: { reads: OutcomeReads }) {
     </div>
   )
 }
+
+/**
+ * Guardrails honesty note: a "success" that survived only by cutting spending
+ * should say so rather than hide behind the headline. Renders nothing under the
+ * flat policy, when no run ever cut (floor = 1), or on legacy cached results
+ * that predate the metric.
+ */
+export function SpendFloorNote({
+  guardrails,
+  spendFloorP10,
+}: {
+  guardrails: boolean
+  spendFloorP10: number | undefined
+}) {
+  if (!guardrails || spendFloorP10 === undefined || spendFloorP10 >= 1) return null
+  const cutPct = Math.round((1 - spendFloorP10) * 100)
+  return (
+    <div className="micro" role="note" style={{ marginTop: 6, color: 'var(--ink-3)', maxWidth: 640 }}>
+      <b style={{ color: 'var(--ink-2)', fontWeight: 500 }}>Guardrails spending floor:</b>{' '}
+      in the worst 1-in-10 futures, staying funded meant cutting spending by about{' '}
+      <span className="num" style={{ color: 'var(--ink-2)' }}>{cutPct}%</span> at the lowest point —
+      those trimmed runs still count as holding.
+    </div>
+  )
+}

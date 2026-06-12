@@ -1,7 +1,7 @@
 /**
  * Cashflow aggregation: turns per-run YearEndState[] into per-year medians
- * for contributions, social security, and withdrawals. Used by the Results
- * dashboard's HiCashflow chart.
+ * for contributions, social security, and withdrawals — the cashflow series
+ * carried on MonteCarloResult.yearlyResults.
  */
 import { percentile } from '../math'
 import type { YearEndState } from './projection'
