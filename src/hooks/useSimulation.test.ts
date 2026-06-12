@@ -138,6 +138,37 @@ describe('useSimulation — hook lifecycle', () => {
     expect(vi.mocked(setCache)).toHaveBeenCalledWith(BASE_INPUTS, MOCK_RESULT)
   })
 
+  it('coalesces rapid input edits into a single recompute', async () => {
+    const { getCache } = await import('../storage/cache')
+    vi.mocked(getCache).mockResolvedValue(undefined)
+
+    const { simulate } = await import('../worker/simulator')
+    vi.mocked(simulate).mockResolvedValue(MOCK_RESULT)
+
+    const inputsRef = { current: BASE_INPUTS }
+    const { result, rerender } = renderHook(() => useSimulation(inputsRef.current))
+
+    // First run fires immediately (leading value, no debounce delay on mount)
+    await waitFor(() => expect(result.current.result).not.toBeNull())
+    expect(vi.mocked(simulate)).toHaveBeenCalledTimes(1)
+
+    // Three rapid edits — like typing in a money field. Flush microtasks
+    // between edits so each cache lookup settles (as it would between real
+    // keystrokes) instead of being cancelled while still pending.
+    for (const annualExpenses of [70_000, 75_000, 80_000]) {
+      inputsRef.current = { ...BASE_INPUTS, annualExpenses }
+      rerender()
+      await act(async () => {})
+    }
+
+    // Only one more run, for the final value, once typing settles
+    await waitFor(() => expect(vi.mocked(simulate)).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(simulate).mock.calls[1][0]).toEqual({ ...BASE_INPUTS, annualExpenses: 80_000 })
+
+    await waitFor(() => expect(result.current.stale).toBe(false))
+    expect(vi.mocked(simulate)).toHaveBeenCalledTimes(2)
+  })
+
   it('surfaces errors from simulation', async () => {
     const { getCache } = await import('../storage/cache')
     vi.mocked(getCache).mockResolvedValue(undefined)

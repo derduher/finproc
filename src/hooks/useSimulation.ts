@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { MonteCarloResult, ProgressEvent } from '../sim/montecarlo'
 import type { SimulationInputs } from '../schema'
 import { simulate } from '../worker/client'
 import { getCache, setCache } from '../storage/cache'
+import { useDebouncedValue } from './useDebouncedValue'
 
 export interface SimulationState {
   result: MonteCarloResult | null
@@ -18,8 +19,14 @@ export interface SimulationState {
  *
  * On each inputs change:
  *   1. Mark existing result as `stale` immediately (UX: show stale chart).
- *   2. Check IDB cache — if hit, resolve instantly (no loading flash).
+ *   2. Once typing settles (350ms debounce, leading value on mount), check
+ *      IDB cache — if hit, resolve instantly (no loading flash).
  *   3. Cache miss → run simulation → store in IDB cache.
+ *
+ * The debounce matches the solver hooks: without it, every keystroke that
+ * misses the cache posts a 1,000-run sim to the shared worker, and the run
+ * the user actually wants queues behind abandoned ones (React-side
+ * cancellation can't recall a message already sent to the worker).
  *
  * Cancels any in-flight run when inputs change or the component unmounts.
  */
@@ -30,31 +37,31 @@ export function useSimulation(inputs: SimulationInputs | null): SimulationState 
   const [error, setError] = useState<Error | null>(null)
   const [progress, setProgress] = useState<ProgressEvent | undefined>(undefined)
 
-  // Track whether the effect's cleanup has run (cancellation)
-  const cancelledRef = useRef(false)
+  // Mark existing result as stale the moment inputs change — the recompute
+  // below waits for typing to settle, but the UI's stale overlay shouldn't.
+  useEffect(() => {
+    if (!inputs) return
+    setStale(true)
+    setError(null)
+    setProgress(undefined)
+  }, [inputs])
+
+  const debounced = useDebouncedValue(inputs, 350)
 
   useEffect(() => {
-    if (!inputs) {
+    if (!debounced) {
       setLoading(false)
       setStale(false)
       setProgress(undefined)
       return
     }
 
-    cancelledRef.current = false
-
-    // Mark existing result as stale right away so the UI can show
-    // a "stale" overlay on the previous chart while recomputing.
-    setStale(true)
-    setError(null)
-    setProgress(undefined)
-
     let didCancel = false
 
     async function run() {
       // 1. Try cache first — zero loading flash on cache hit
       try {
-        const cached = await getCache(inputs!)
+        const cached = await getCache(debounced!)
         if (didCancel) return
         if (cached) {
           setResult(cached)
@@ -65,18 +72,19 @@ export function useSimulation(inputs: SimulationInputs | null): SimulationState 
       } catch {
         // IDB unavailable — fall through to compute
       }
+      if (didCancel) return
 
       // 2. Cache miss: show loading and compute
-      if (!didCancel) setLoading(true)
+      setLoading(true)
 
       try {
-        const res = await simulate(inputs!, 1000, (p) => {
+        const res = await simulate(debounced!, 1000, (p) => {
           if (didCancel) return
           setProgress(p)
         })
         if (didCancel) return
         // 3. Store in cache async (fire-and-forget; don't block UI)
-        setCache(inputs!, res).catch(() => {})
+        setCache(debounced!, res).catch(() => {})
         setResult(res)
         setStale(false)
         setLoading(false)
@@ -92,9 +100,8 @@ export function useSimulation(inputs: SimulationInputs | null): SimulationState 
 
     return () => {
       didCancel = true
-      cancelledRef.current = true
     }
-  }, [inputs])
+  }, [debounced])
 
   return { result, loading, stale, error, progress }
 }

@@ -19,10 +19,18 @@ vi.mock('./simulator', () => ({
 const MOCK_RESULT = { successRate: 0.91 } as unknown as MonteCarloResult
 
 class FakeWorker {
-  static instances: Array<{ url: URL; options?: WorkerOptions }> = []
-  constructor(url: URL, options?: WorkerOptions) {
-    FakeWorker.instances.push({ url, options })
+  static instances: FakeWorker[] = []
+  listeners: Record<string, (event: { message?: string }) => void> = {}
+  constructor(
+    public url: URL,
+    public options?: WorkerOptions,
+  ) {
+    FakeWorker.instances.push(this)
   }
+  addEventListener(type: string, fn: (event: { message?: string }) => void) {
+    this.listeners[type] = fn
+  }
+  terminate() {}
 }
 
 /**
@@ -176,5 +184,60 @@ describe('worker client — Worker path', () => {
     expect(res).toBe(MOCK_RESULT)
     expect(direct.simulate).toHaveBeenCalled()
     expect(comlink.wrap).not.toHaveBeenCalled()
+  })
+
+  it('only attempts Worker construction once when the constructor throws', async () => {
+    let constructions = 0
+    class ThrowingWorker {
+      constructor() {
+        constructions++
+        throw new Error('CSP says no')
+      }
+    }
+    vi.stubGlobal('Worker', ThrowingWorker)
+    const { client, direct } = await loadFresh()
+    vi.mocked(direct.simulate).mockResolvedValue(MOCK_RESULT)
+    vi.mocked(direct.sensitivity).mockResolvedValue('sens' as never)
+
+    await client.simulate(defaultInputs(), 1000)
+    await client.sensitivity(defaultInputs())
+
+    expect(constructions).toBe(1)
+  })
+
+  it('rejects in-flight calls and falls back to direct when the worker fails asynchronously', async () => {
+    vi.stubGlobal('Worker', FakeWorker)
+    const { client, direct, comlink } = await loadFresh()
+    const remote = makeRemote()
+    // The worker script never loads, so the Comlink call never settles.
+    remote.simulate = vi.fn(() => new Promise(() => {}))
+    vi.mocked(comlink.wrap).mockReturnValue(remote as never)
+    vi.mocked(direct.simulate).mockResolvedValue(MOCK_RESULT)
+
+    const pending = client.simulate(defaultInputs(), 1000)
+    // The browser reports async load failures via the worker's `error` event.
+    FakeWorker.instances[0].listeners['error']?.({ message: 'failed to fetch worker script' })
+
+    await expect(pending).resolves.toBe(MOCK_RESULT)
+    expect(direct.simulate).toHaveBeenCalled()
+  })
+
+  it('routes subsequent calls directly after a worker failure, without reconstructing', async () => {
+    vi.stubGlobal('Worker', FakeWorker)
+    const { client, direct, comlink } = await loadFresh()
+    const remote = makeRemote()
+    remote.simulate = vi.fn(() => new Promise(() => {}))
+    vi.mocked(comlink.wrap).mockReturnValue(remote as never)
+    vi.mocked(direct.simulate).mockResolvedValue(MOCK_RESULT)
+    vi.mocked(direct.sensitivity).mockResolvedValue('sens' as never)
+
+    const pending = client.simulate(defaultInputs(), 1000)
+    FakeWorker.instances[0].listeners['error']?.({ message: 'worker crashed' })
+    await pending
+
+    await expect(client.sensitivity(defaultInputs())).resolves.toBe('sens')
+    expect(direct.sensitivity).toHaveBeenCalled()
+    expect(remote.sensitivity).not.toHaveBeenCalled()
+    expect(FakeWorker.instances).toHaveLength(1)
   })
 })
