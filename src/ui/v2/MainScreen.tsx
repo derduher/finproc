@@ -17,7 +17,7 @@ import { buildVerdict, inflatedSpend } from '../../sim/verdict'
 import { formatMoneyAbbreviated as fmt } from '../../math'
 import { TopBar2 } from './TopBar2'
 import { CoreLevers, totalSaved } from './CoreLevers'
-import { SustainableHero, RiskRead, SurplusRead, HoldChip, EarliestRetireRead, SaveMoreRead } from './Outcomes'
+import { SustainableHero, RiskRead, SurplusRead, HoldChip, EarliestRetireRead, SaveMoreRead, SpendFloorNote } from './Outcomes'
 import { AssumptionBar, ModeToggle, DollarModeToggle } from './Assumptions'
 import { PathsChart, type PathExpenseMarker } from '../charts/PathsChart'
 import { GuardrailTimeline } from '../charts/GuardrailTimeline'
@@ -26,7 +26,10 @@ import { MethodologyDrawer } from './MethodologyDrawer'
 import { DisclaimerBanner } from './DisclaimerBanner'
 import { PathStories } from './PathStories'
 import { StressTest } from './StressTest'
+import { WhatMoves } from './WhatMoves'
 import { useHistoricalStress } from '../../hooks/useHistoricalStress'
+import { useSensitivity } from '../../hooks/useSensitivity'
+import { useInsights } from '../../hooks/useInsights'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
 /** Sample path whose ending balance is closest to the median — a representative run. */
@@ -62,6 +65,8 @@ export function MainScreen() {
   const CHART_W = 1320
   const guardrails = inputs.spendingPolicy === 'guardrails'
   const stress = useHistoricalStress(inputs, displayMode)
+  const { data: sensitivityRows, loading: sensitivityLoading } = useSensitivity(inputs)
+  const { data: insightCards, loading: insightsLoading } = useInsights(inputs)
 
   return (
     <div className="hf" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
@@ -201,6 +206,7 @@ export function MainScreen() {
                         width={CHART_W}
                       />
                     )}
+                    <SpendFloorNote guardrails={guardrails} spendFloorP10={rawResult.spendFloorP10} />
                   </div>
 
                   {/* two-sided outcome */}
@@ -221,6 +227,15 @@ export function MainScreen() {
                   {/* historical stress test */}
                   <div style={{ marginTop: 18 }}>
                     <StressTest stress={stress} selectedId={stressId} onSelect={setStressId} />
+                  </div>
+
+                  {/* sensitivity tornado + insight cards */}
+                  <div style={{ marginTop: 18 }}>
+                    <WhatMoves
+                      sensitivity={sensitivityRows}
+                      insights={insightCards}
+                      loading={sensitivityLoading || insightsLoading}
+                    />
                   </div>
 
                   {/* demoted success + assumptions */}

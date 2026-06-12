@@ -46,11 +46,11 @@ URL (?s=… &u=…)
 | Schema | `src/schema/index.ts` | Zod schemas, branded types (`Money`, `AgeYears`), `defaultInputs()` |
 | Math | `src/math/index.ts` | Pure functions: PRNG (mulberry32), Box-Muller, percentile, RMD table, tax gross-up, format |
 | Simulation | `src/sim/` | `account.ts` (SimAccount class) → `projection.ts` (single run) → `montecarlo.ts` (1,000 runs) → `sensitivity.ts` (OAT ±20%) → `cashflow.ts` (aggregated series) → `insights.ts` (rule-based cards) |
-| Worker | `src/worker/simulator.ts` | Comlink `expose({ simulate })` — also imported directly in tests (no actual Worker). Emits `ProgressEvent` via `onProgress` callback. |
+| Worker | `src/worker/simulator.ts` | Plain async exports (`simulate`, `sustainableSpend`, `earliestRetirementAge`, `requiredExtraSavings`, `sensitivity`, `insights`) + Comlink `expose`. NOTE: every hook currently imports these directly — nothing instantiates an actual Worker, so the heavy math runs on the main thread despite the scaffolding. |
 | Storage | `src/storage/` | `cache.ts` (IDB via idb-keyval), `urlState.ts` (lz-string compress/decompress for both inputs and ui prefs) |
-| Hooks | `src/hooks/` | `useSimulation` (cache-first, exposes `progress`), `useUrlSync` (500ms debounce), `useScenarios` (IDB, max 4) |
-| State | `src/store.ts` | Zustand store: `inputs`, `ui.{activeStep, displayMode, aesthetic, theme, density, lastCommittedAt}`. Actions: `patchInputs`, `patchPerson`, `setActiveStep`, `setAesthetic`, `setTheme`, `setDensity` |
-| UI | `src/ui/` | Steps 0–5, charts (raw SVG), frame chrome (TopBar, StepRail, PreviewRail, MobileHeader), loading states |
+| Hooks | `src/hooks/` | `useSimulation` (cache-first, exposes `progress`), solver hooks (`useSustainableSpend`, `useEarliestRetirementAge`, `useRequiredExtraSavings`), `useSensitivity` / `useInsights` (tornado + cards), `useHistoricalStress`, `useUrlSync` (500ms debounce), `useScenarios` (IDB, max 4) |
+| State | `src/store.ts` | Zustand store: `inputs`, `ui.{displayMode, aesthetic, theme, density, lastCommittedAt}`. Actions: `patchInputs`, `patchPerson`, `setDisplayMode`, `setAesthetic`, `setTheme`, `setDensity` |
+| UI | `src/ui/` | `v2/` single live screen (GuidedFirstRun → MainScreen + AdvancedDrawer/MethodologyDrawer), `charts/` raw-SVG charts (PathsChart, HiTornado, GuardrailTimeline, LegacyBar), `frame/` (Logo, UrlParseFailedBanner), `shared/` (Field, MoneyInput) |
 
 ### Schema additions (hi-fi alignment)
 
@@ -84,13 +84,11 @@ URL (?s=… &u=…)
 - **Withdrawal strategies**: `TaxOptimal` (taxable → traditional → Roth), `Proportional`, `UserDefined`.
 - **Insight rules** (`src/sim/insights.ts`): pure functions `(inputs, result) → InsightCard[]`. Current rules: tax-strategy delta, healthcare gap (62→65), "retire 1 year later" delta (bumps `person.retirementAge` via `withRetirementAge`).
 
-### UI shell (responsive)
+### UI shell
 
-- `Frame.tsx` renders TopBar + StepRail (left, 240px) + main area + PreviewRail (right, 296px) + MobileHeader.
-- CSS classes `shell-desktop-only` / `shell-mobile-only` toggle visibility at `@media (max-width: 768px)`. **No JS resize listener.**
-- `isMobile()` (`src/ui/shared/isMobile.ts`) reads `window.matchMedia('(max-width: 768px)').matches` once at render time — used for inline responsive style props (PipeEditor flex-direction, metrics grid columns).
-- Design tokens: three aesthetics (`warm` / `cool` / `mono`) × two themes (`light` / `dark`) via `data-aesthetic` / `data-theme` attributes on the root `.hf` element.
-- Density: `data-density="comfortable|compact"` on root `.hf`.
+- The app is the v2 single live screen: `App.tsx` renders `GuidedFirstRun` (no accounts yet) or `MainScreen`, plus drawers (`AdvancedDrawer` for every editable input, `MethodologyDrawer` for the model notes). The legacy 6-step wizard (`?v1=1`) has been removed.
+- `MainScreen` reads: verdict sentence → sustainable-spend hero + levers → PathsChart (spaghetti futures, optional crisis overlay) → risk/surplus reads → PathStories → StressTest → WhatMoves (sensitivity tornado + insight cards) → demoted success chip + assumptions.
+- Design tokens: three aesthetics (`warm` / `cool` / `mono`) × two themes (`light` / `dark`) via `data-aesthetic` / `data-theme` attributes on the root `.hf` element; density via `data-density`. The store + URL prefs round-trip these, but no current UI control changes them (the switchers lived in the deleted v1 TopBar).
 - Animations: `.flow-dash` and `.flow-pulse` are disabled under `@media (prefers-reduced-motion: reduce)`.
 
 ### Key constraints / gotchas
@@ -98,7 +96,7 @@ URL (?s=… &u=…)
 - **React Compiler** (`babel-plugin-react-compiler`) is active — do not add `useMemo`/`useCallback` manually. The compiler handles memoisation.
 - **No Recharts** — all charts (`HiFanChart`, `HiTornado`, `HiCashflow`) are hand-rolled SVG React components in `src/ui/charts/`.
 - **Coverage threshold**: 90% stmt/func/line, 89% branch — measured only for `src/{math,schema,sim,storage,hooks,store.ts}`. UI components are excluded.
-- **`simulate` in tests**: `src/worker/simulator.ts` exports `simulate` as a plain async function. Tests mock it with `vi.mock('../worker/simulator')` — no actual Worker is spawned.
+- **`simulate` in tests**: `src/worker/simulator.ts` exports `simulate` as a plain async function. Tests mock it with `vi.mock('../worker/simulator')` — no actual Worker is spawned (nor in the app itself; see Worker row above).
 - **RNG draw order matters**: `buildRateSchedule` consumes three epistemic draws (stock, inflation, bond) at the start of each run, then three per-year draws. Changing the order changes every seeded result, so treat additions to the draw sequence as a breaking change for any pinned expectations.
 - **The user's market band is NOT per-year volatility**: segment sigmas from P10–P90 are epistemic (long-run average); per-year market noise is the separate `ANNUAL_VOLATILITY` constant. Never feed the band's sigma directly into yearly draws — that reproduces the old bug where a 4–10% band implied an asset that never has a down year.
 
@@ -110,10 +108,11 @@ The original product requirements and implementation plan are preserved in [`doc
 
 | Spec / Old Actual | Current |
 |---|---|
-| Recharts for charts | Raw SVG components (`HiFanChart`, `HiTornado`, `HiCashflow`) |
-| Real/nominal toggle transforms cached values | Nominal values stored; `deflateResult` (`src/sim/displayMode.ts`) converts results to today's dollars at render time in ResultsStep / PreviewRail / MainScreen |
-| Scenario comparison overlay | Scenarios saved/loaded via `useScenarios`; "Branch scenario" button in ResultsStep footer; no side-by-side comparison view |
-| No worker progress events | `simulate(inputs, onProgress?)` emits 4-stage progress; `useSimulation` surfaces `progress` to `LoadingState` |
-| UI components not tested | React Testing Library tests added for non-presentational behavior (responsive layout, interactive charts, insight rules) |
+| Recharts for charts | Raw SVG components (`PathsChart`, `HiTornado`, `GuardrailTimeline`, `LegacyBar`) |
+| 6-step wizard UI | v2 single live screen (`GuidedFirstRun` → `MainScreen` + drawers); the wizard and its `?v1=1` escape hatch were removed |
+| Real/nominal toggle transforms cached values | Nominal values stored; `deflateResult` (`src/sim/displayMode.ts`) converts results to today's dollars at render time in MainScreen |
+| Scenario comparison overlay | Scenarios saved/loaded via `useScenarios`; no side-by-side comparison view |
+| No worker progress events | `simulate(inputs, onProgress?)` emits 4-stage progress; `useSimulation` surfaces `progress` (currently unused by the v2 UI) |
+| UI components not tested | React Testing Library tests added for non-presentational behavior (drawer editing, interactive charts, insight rules) |
 
 When in doubt, the actual code takes precedence over the spec.

@@ -8,7 +8,6 @@ beforeEach(() => {
   useStore.setState({
     inputs: useStore.getState().inputs,
     ui: {
-      activeStep: 0,
       displayMode: 'nominal',
       aesthetic: 'warm',
       theme: 'light',

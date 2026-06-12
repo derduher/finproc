@@ -8,7 +8,6 @@ beforeEach(() => {
   useStore.setState({
     inputs: defaultInputs(),
     ui: {
-      activeStep: 0,
       displayMode: 'nominal',
       aesthetic: 'warm',
       theme: 'light',
@@ -160,14 +159,6 @@ describe('useStore — retirement-age cascade', () => {
 })
 
 describe('useStore — UI state', () => {
-  it('setActiveStep updates the active step', () => {
-    const { result } = renderHook(() => useStore())
-    act(() => {
-      result.current.setActiveStep(3)
-    })
-    expect(result.current.ui.activeStep).toBe(3)
-  })
-
   it('setDisplayMode toggles nominal/real', () => {
     const { result } = renderHook(() => useStore())
     act(() => {
@@ -212,10 +203,10 @@ describe('useStore — aesthetic / theme / density', () => {
   it('preserves other UI state when setting aesthetic', () => {
     const { result } = renderHook(() => useStore())
     act(() => {
-      result.current.setActiveStep(3)
+      result.current.setDisplayMode('real')
       result.current.setAesthetic('cool')
     })
-    expect(result.current.ui.activeStep).toBe(3)
+    expect(result.current.ui.displayMode).toBe('real')
     expect(result.current.ui.aesthetic).toBe('cool')
   })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { simulate, sustainableSpend } from './simulator'
+import { simulate, sustainableSpend, sensitivity, insights } from './simulator'
 import { defaultInputs, WithdrawalStrategy } from '../schema'
 
 const BASE_INPUTS = {
@@ -67,4 +67,32 @@ describe('simulate — error propagation', () => {
   it('throws on invalid run count', async () => {
     await expect(simulate(BASE_INPUTS, 0)).rejects.toThrow()
   })
+})
+
+describe('sensitivity — Comlink wrapper', () => {
+  it('returns tornado rows sorted by descending impact', async () => {
+    const rows = await sensitivity(BASE_INPUTS, 30)
+    expect(rows.length).toBeGreaterThan(0)
+    for (const r of rows) {
+      expect(r).toHaveProperty('label')
+      expect(typeof r.loDelta).toBe('number')
+      expect(typeof r.hiDelta).toBe('number')
+    }
+    const impact = (r: (typeof rows)[number]) => Math.max(Math.abs(r.loDelta), Math.abs(r.hiDelta))
+    for (let i = 1; i < rows.length; i++) {
+      expect(impact(rows[i - 1])).toBeGreaterThanOrEqual(impact(rows[i]))
+    }
+  }, 30_000)
+})
+
+describe('insights — Comlink wrapper', () => {
+  it('returns insight cards (possibly empty) with the card shape', async () => {
+    const cards = await insights(BASE_INPUTS, 30)
+    expect(Array.isArray(cards)).toBe(true)
+    for (const c of cards) {
+      expect(c).toHaveProperty('tone')
+      expect(c).toHaveProperty('title')
+      expect(c).toHaveProperty('body')
+    }
+  }, 30_000)
 })

@@ -7,12 +7,16 @@ vi.mock('../worker/simulator', () => ({
   earliestRetirementAge: vi.fn(),
   requiredExtraSavings: vi.fn(),
   sustainableSpend: vi.fn(),
+  sensitivity: vi.fn(),
+  insights: vi.fn(),
 }))
 
-import { earliestRetirementAge, requiredExtraSavings, sustainableSpend } from '../worker/simulator'
+import { earliestRetirementAge, requiredExtraSavings, sustainableSpend, sensitivity, insights } from '../worker/simulator'
 import { useEarliestRetirementAge } from './useEarliestRetirementAge'
 import { useRequiredExtraSavings } from './useRequiredExtraSavings'
 import { useSustainableSpend } from './useSustainableSpend'
+import { useSensitivity } from './useSensitivity'
+import { useInsights } from './useInsights'
 
 const inputs = defaultInputs()
 
@@ -54,5 +58,28 @@ describe('useSustainableSpend', () => {
     vi.mocked(sustainableSpend).mockResolvedValue({ spend: 72_000, successRate: 0.9 })
     const { result } = renderHook(() => useSustainableSpend(inputs))
     await waitFor(() => expect(result.current.spend).toBe(72_000), { timeout: 2000 })
+  })
+})
+
+describe('useSensitivity', () => {
+  it('exposes tornado rows once inputs settle', async () => {
+    vi.mocked(sensitivity).mockResolvedValue([
+      { label: 'Annual expenses', sub: '±20%', loDelta: 0.1, hiDelta: -0.15 },
+    ])
+    const { result } = renderHook(() => useSensitivity(inputs))
+    await waitFor(() => expect(result.current.data?.length).toBe(1), { timeout: 2000 })
+    expect(result.current.data![0].label).toBe('Annual expenses')
+    expect(result.current.loading).toBe(false)
+  })
+})
+
+describe('useInsights', () => {
+  it('exposes insight cards once inputs settle', async () => {
+    vi.mocked(insights).mockResolvedValue([
+      { tone: 'good', title: 'Tax-optimal strategy is paying off', body: 'x', cta: 'See strategy' },
+    ])
+    const { result } = renderHook(() => useInsights(inputs))
+    await waitFor(() => expect(result.current.data?.length).toBe(1), { timeout: 2000 })
+    expect(result.current.data![0].tone).toBe('good')
   })
 })

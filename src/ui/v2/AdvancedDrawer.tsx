@@ -10,7 +10,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import { MoneyInput } from '../shared/MoneyInput'
-import { WithdrawalStrategy, EXPENSE_CATEGORIES } from '../../schema'
+import { WithdrawalStrategy, EXPENSE_CATEGORIES, DEFAULT_BOND_BAND } from '../../schema'
 import type { Account, OneTimeExpense, ContributionFrequency, ExpenseItem } from '../../schema'
 import { createExpenseItem } from '../../sim/expenses'
 import { suggestedExpenses } from '../../sim/expenseSuggestions'
@@ -211,6 +211,29 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                         <span className="micro" style={{ color: 'var(--ink-3)', paddingBottom: 7 }}>≈ {fmtK(annual)}/yr</span>
                       </>
                     )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                    <span className="micro">holds</span>
+                    <span className="lever-value" style={{ padding: '4px 8px' }}>
+                      <input
+                        type="number"
+                        aria-label="Stock allocation"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={Math.round(((a.stockAllocation ?? 1) * 100))}
+                        onChange={(e) => {
+                          // Ignore a transiently empty field — snapping to 0%
+                          // would silently flip the account to all bonds mid-edit.
+                          if (e.target.value === '') return
+                          const pct = Math.min(100, Math.max(0, Number(e.target.value) || 0))
+                          updateAccount(i, (x) => ({ ...x, stockAllocation: pct / 100 }))
+                        }}
+                        style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: 44 }}
+                      />
+                      <span className="lv-suf">% stocks</span>
+                    </span>
+                    <span className="micro" style={{ color: 'var(--ink-3)' }}>rest grows at the bond rate</span>
                   </div>
                   {kindSupportsMax(kind) && (
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
@@ -525,7 +548,14 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
               onMin={(v) => patchInputs({ initialInflationMin: v })}
               onMax={(v) => patchInputs({ initialInflationMax: v })}
             />
-            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>Sampled fresh each year (sequence-of-returns risk modeled), with returns and inflation negatively correlated so high-inflation years tend to be low-return years. Historical averages run optimistic at today's valuations.</div>
+            <RangeRow
+              label="bond growth (P10–P90)"
+              min={inputs.bondGrowthMin ?? DEFAULT_BOND_BAND.min}
+              max={inputs.bondGrowthMax ?? DEFAULT_BOND_BAND.max}
+              onMin={(v) => patchInputs({ bondGrowthMin: v })}
+              onMax={(v) => patchInputs({ bondGrowthMax: v })}
+            />
+            <div className="micro" style={{ color: 'var(--ink-3)', marginTop: 8 }}>Each band is your plausible <em>long-run average</em>; every simulated future draws one average from it. Realistic year-to-year swings (≈17%/yr stocks, ≈7%/yr bonds) are layered on top, with sticky inflation and a stagflation-style link between high inflation and weak stock years. The bond band applies to the non-stock share of each account.</div>
           </Acc>
         </div>
 
