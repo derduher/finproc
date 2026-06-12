@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { sumExpenseItems, scaleExpenseItems, createExpenseItem } from './expenses'
+import { sumExpenseItems, scaleExpenseItems, createExpenseItem, isEssentialExpense, sumEssentialExpenses } from './expenses'
 import type { ExpenseItem } from '../schema'
 
 function item(amount: number, over: Partial<ExpenseItem> = {}): ExpenseItem {
-  return { id: over.id ?? 'x', label: over.label ?? 'Item', category: over.category ?? 'other', annualAmountPresentDollars: amount }
+  return {
+    id: over.id ?? 'x',
+    label: over.label ?? 'Item',
+    category: over.category ?? 'other',
+    annualAmountPresentDollars: amount,
+    ...(over.essential !== undefined && { essential: over.essential }),
+  }
 }
 
 describe('sumExpenseItems', () => {
@@ -26,6 +32,40 @@ describe('createExpenseItem', () => {
   it('honors provided fields', () => {
     const it_ = createExpenseItem({ id: 'k', label: 'Healthcare', category: 'healthcare', annualAmountPresentDollars: 9_000 })
     expect(it_).toEqual({ id: 'k', label: 'Healthcare', category: 'healthcare', annualAmountPresentDollars: 9_000 })
+  })
+})
+
+describe('isEssentialExpense', () => {
+  it('defaults needs-type categories to essential', () => {
+    for (const category of ['housing', 'healthcare', 'food', 'transportation', 'insurance', 'taxes'] as const) {
+      expect(isEssentialExpense(item(1_000, { category }))).toBe(true)
+    }
+  })
+
+  it('defaults discretionary and the "other" catch-all to non-essential', () => {
+    expect(isEssentialExpense(item(1_000, { category: 'discretionary' }))).toBe(false)
+    expect(isEssentialExpense(item(1_000, { category: 'other' }))).toBe(false)
+  })
+
+  it('an explicit per-item flag overrides the category default in both directions', () => {
+    expect(isEssentialExpense(item(1_000, { category: 'other', essential: true }))).toBe(true)
+    expect(isEssentialExpense(item(1_000, { category: 'healthcare', essential: false }))).toBe(false)
+  })
+})
+
+describe('sumEssentialExpenses', () => {
+  it('totals only the items that are effectively essential', () => {
+    const items = [
+      item(30_000, { id: 'a', category: 'housing' }), // essential by default
+      item(20_000, { id: 'b', category: 'other' }), // non-essential by default
+      item(10_000, { id: 'c', category: 'discretionary', essential: true }), // explicit override
+      item(5_000, { id: 'd', category: 'food', essential: false }), // explicit override
+    ]
+    expect(sumEssentialExpenses(items)).toBe(40_000)
+  })
+
+  it('is 0 for an empty list', () => {
+    expect(sumEssentialExpenses([])).toBe(0)
   })
 })
 

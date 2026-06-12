@@ -148,4 +148,23 @@ describe('AdvancedDrawer — baseline expenses', () => {
     fireEvent.click(within(section()).getByRole('button', { name: /property tax/i }))
     expect(within(section()).queryByRole('button', { name: /property tax/i })).not.toBeInTheDocument()
   })
+
+  it('renders an essential toggle per item, defaulting from the category', () => {
+    render(<AdvancedDrawer onClose={() => {}} />)
+    const toggles = within(section()).getAllByLabelText('Essential expense') as HTMLInputElement[]
+    // Housing and food are needs-type categories → essential by default.
+    expect(toggles).toHaveLength(2)
+    expect(toggles[0].checked).toBe(true)
+    expect(toggles[1].checked).toBe(true)
+  })
+
+  it('unticking essential writes an explicit per-item override to the store', () => {
+    render(<AdvancedDrawer onClose={() => {}} />)
+    const toggles = within(section()).getAllByLabelText('Essential expense')
+    fireEvent.click(toggles[1])
+    const items = useStore.getState().inputs.baselineExpenses
+    expect(items[1].essential).toBe(false)
+    // The other item is untouched (still relying on its category default).
+    expect(items[0].essential).toBeUndefined()
+  })
 })

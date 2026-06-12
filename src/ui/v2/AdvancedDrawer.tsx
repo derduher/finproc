@@ -12,7 +12,7 @@ import { useStore } from '../../store'
 import { MoneyInput } from '../shared/MoneyInput'
 import { WithdrawalStrategy, EXPENSE_CATEGORIES, DEFAULT_BOND_BAND } from '../../schema'
 import type { Account, OneTimeExpense, ContributionFrequency, ExpenseItem } from '../../schema'
-import { createExpenseItem } from '../../sim/expenses'
+import { createExpenseItem, isEssentialExpense } from '../../sim/expenses'
 import { suggestedExpenses } from '../../sim/expenseSuggestions'
 import {
   ACCOUNT_KIND_LABELS,
@@ -357,6 +357,15 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                         style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: 76 }}
                       />
                     </span>
+                    <label className="micro" title="Essential items set the guardrails spending floor — market-driven cuts never go below them" style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--ink-2)' }}>
+                      <input
+                        type="checkbox"
+                        aria-label="Essential expense"
+                        checked={isEssentialExpense(it)}
+                        onChange={(e) => updateBaseline(it.id, { essential: e.target.checked })}
+                      />
+                      essential
+                    </label>
                     <button
                       className="btn btn-sm btn-ghost"
                       aria-label="Remove baseline expense"
@@ -399,6 +408,7 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
 
               <div className="micro" style={{ marginTop: 8, color: 'var(--ink-3)' }}>
                 Recurring annual spending in today's $. The total flows into the projection.
+                With guardrails on, market-driven cuts stop at the sum of items marked essential.
               </div>
             </div>
           </Acc>

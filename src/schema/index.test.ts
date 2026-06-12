@@ -329,6 +329,22 @@ describe('SimulationInputsSchema — baseline expense itemization', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  it('round-trips the per-item essential flag and leaves it absent when unset', () => {
+    const result = SimulationInputsSchema.safeParse({
+      ...defaultInputs(),
+      baselineExpenses: [
+        { id: 'h', label: 'Housing', category: 'housing', annualAmountPresentDollars: 30_000, essential: false },
+        { id: 'g', label: 'General living', category: 'other', annualAmountPresentDollars: 12_000 },
+      ],
+    })
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.data.baselineExpenses[0].essential).toBe(false)
+    // Unset stays unset (back-compat URLs): the effective default is derived
+    // from the category at point of use, not baked in at parse time.
+    expect(result.data.baselineExpenses[1].essential).toBeUndefined()
+  })
 })
 
 describe('defaultInputs', () => {
