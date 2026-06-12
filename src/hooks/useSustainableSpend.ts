@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { sustainableSpend } from '../worker/simulator'
+import { sustainableSpend } from '../worker/client'
 import { useDebouncedValue } from './useDebouncedValue'
 import type { SimulationInputs } from '../schema'
 

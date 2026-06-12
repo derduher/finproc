@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { earliestRetirementAge } from '../worker/simulator'
+import { earliestRetirementAge } from '../worker/client'
 import { useDebouncedValue } from './useDebouncedValue'
 import type { SimulationInputs } from '../schema'
 

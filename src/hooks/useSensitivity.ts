@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { sensitivity } from '../worker/simulator'
+import { sensitivity } from '../worker/client'
 import { useDebouncedValue } from './useDebouncedValue'
 import type { SimulationInputs, SensitivityResult } from '../schema'
 

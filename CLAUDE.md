@@ -34,7 +34,7 @@ URL (?s=… &u=…)
             └─ useSimulation hook
                  ├─ IDB cache lookup (idb-keyval, djb2 hash key)
                  │    └─ hit → instant result, stale=false
-                 └─ miss → simulate() via worker/simulator.ts
+                 └─ miss → simulate() via worker/client.ts (shared Comlink Worker → worker/simulator.ts)
                        └─ runMonteCarlo → IDB cache → React state
                              └─ progress events: parse → sample → project → aggregate
 ```
@@ -46,7 +46,7 @@ URL (?s=… &u=…)
 | Schema | `src/schema/index.ts` | Zod schemas, branded types (`Money`, `AgeYears`), `defaultInputs()` |
 | Math | `src/math/index.ts` | Pure functions: PRNG (mulberry32), Box-Muller, percentile, RMD table, tax gross-up, format |
 | Simulation | `src/sim/` | `account.ts` (SimAccount class) → `projection.ts` (single run) → `montecarlo.ts` (1,000 runs) → `sensitivity.ts` (OAT ±20%) → `cashflow.ts` (aggregated series) → `insights.ts` (rule-based cards) |
-| Worker | `src/worker/simulator.ts` | Plain async exports (`simulate`, `sustainableSpend`, `earliestRetirementAge`, `requiredExtraSavings`, `sensitivity`, `insights`) + Comlink `expose`. NOTE: every hook currently imports these directly — nothing instantiates an actual Worker, so the heavy math runs on the main thread despite the scaffolding. |
+| Worker | `src/worker/simulator.ts` (worker entry), `src/worker/client.ts` (main-thread client) | `simulator.ts` exports plain async functions (`simulate`, `sustainableSpend`, `earliestRetirementAge`, `requiredExtraSavings`, `sensitivity`, `insights`) + Comlink `expose`. Hooks import from `client.ts`, which lazily spawns one shared module Worker and routes calls through a Comlink `wrap`, so the heavy math runs off the main thread; `onProgress` crosses the boundary via `Comlink.proxy`. When `Worker` is unavailable or fails to construct (jsdom tests), the client falls back to calling the simulator functions in-module. |
 | Storage | `src/storage/` | `cache.ts` (IDB via idb-keyval), `urlState.ts` (lz-string compress/decompress for both inputs and ui prefs) |
 | Hooks | `src/hooks/` | `useSimulation` (cache-first, exposes `progress`), solver hooks (`useSustainableSpend`, `useEarliestRetirementAge`, `useRequiredExtraSavings`), `useSensitivity` / `useInsights` (tornado + cards), `useHistoricalStress`, `useUrlSync` (500ms debounce), `useScenarios` (IDB, max 4) |
 | State | `src/store.ts` | Zustand store: `inputs`, `ui.{displayMode, aesthetic, theme, density, lastCommittedAt}`. Actions: `patchInputs`, `patchPerson`, `setDisplayMode`, `setAesthetic`, `setTheme`, `setDensity` |
@@ -96,7 +96,7 @@ URL (?s=… &u=…)
 - **React Compiler** (`babel-plugin-react-compiler`) is active — do not add `useMemo`/`useCallback` manually. The compiler handles memoisation.
 - **No Recharts** — all charts (`HiFanChart`, `HiTornado`, `HiCashflow`) are hand-rolled SVG React components in `src/ui/charts/`.
 - **Coverage threshold**: 90% stmt/func/line, 89% branch — measured only for `src/{math,schema,sim,storage,hooks,store.ts}`. UI components are excluded.
-- **`simulate` in tests**: `src/worker/simulator.ts` exports `simulate` as a plain async function. Tests mock it with `vi.mock('../worker/simulator')` — no actual Worker is spawned (nor in the app itself; see Worker row above).
+- **`simulate` in tests**: `src/worker/simulator.ts` exports `simulate` as a plain async function. Tests mock it with `vi.mock('../worker/simulator')` — jsdom has no `Worker`, so `src/worker/client.ts` falls back to the direct simulator import and the mock intercepts everything; no actual Worker is spawned in tests. In the browser the client spawns one shared module Worker (see Worker row above). The literal `new Worker(new URL('./simulator', import.meta.url), { type: 'module' })` shape in `client.ts` is what Vite statically detects to bundle the worker entry — don't refactor it into variables.
 - **RNG draw order matters**: `buildRateSchedule` consumes three epistemic draws (stock, inflation, bond) at the start of each run, then three per-year draws. Changing the order changes every seeded result, so treat additions to the draw sequence as a breaking change for any pinned expectations.
 - **The user's market band is NOT per-year volatility**: segment sigmas from P10–P90 are epistemic (long-run average); per-year market noise is the separate `ANNUAL_VOLATILITY` constant. Never feed the band's sigma directly into yearly draws — that reproduces the old bug where a 4–10% band implied an asset that never has a down year.
 

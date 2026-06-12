@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MonteCarloResult, ProgressEvent } from '../sim/montecarlo'
 import type { SimulationInputs } from '../schema'
-import { simulate } from '../worker/simulator'
+import { simulate } from '../worker/client'
 import { getCache, setCache } from '../storage/cache'
 
 export interface SimulationState {

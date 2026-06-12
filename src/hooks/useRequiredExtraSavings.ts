@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { requiredExtraSavings } from '../worker/simulator'
+import { requiredExtraSavings } from '../worker/client'
 import { useDebouncedValue } from './useDebouncedValue'
 import type { SimulationInputs } from '../schema'
 
