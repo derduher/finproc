@@ -171,6 +171,13 @@ export const ExpenseItemSchema = z.object({
   category: z.enum(EXPENSE_CATEGORIES),
   /** Annual amount in today's dollars; inflated forward like the aggregate baseline. */
   annualAmountPresentDollars: z.number().min(0),
+  /**
+   * Whether this item is a non-negotiable need. The sum of essential items is
+   * the guardrails spending floor: market-driven cuts never take the annual
+   * spend below it. Unset (back-compat URLs) falls back to a category default
+   * — see `isEssentialExpense` in `sim/expenses.ts`.
+   */
+  essential: z.boolean().optional(),
 })
 
 export type ExpenseItem = z.infer<typeof ExpenseItemSchema>

@@ -12,6 +12,7 @@ import {
   EARLY_WITHDRAWAL_PENALTY,
 } from './tax'
 import type { FilingStatus } from './tax'
+import { sumEssentialExpenses } from './expenses'
 import { WithdrawalStrategy } from '../schema'
 import type { SimulationInputs } from '../schema'
 
@@ -127,6 +128,7 @@ export function runSingleProjection(
     accounts,
     breakpoints,
     annualExpenses,
+    baselineExpenses,
     socialSecurity,
     oneTimeExpenses,
     withdrawalStrategy,
@@ -142,6 +144,13 @@ export function runSingleProjection(
   let minSpendMultiplier = 1
   let baseWithdrawalRate: number | undefined
   const spendAdjustments: SpendAdjustment[] = []
+  // Cuts are bounded by the essential share of the baseline breakdown: a cut to
+  // entertainment is survivable, a cut to rent and groceries is not, so the
+  // multiplier never drops below essentials ÷ the plan's spend. Note the floor
+  // is measured against `annualExpenses` (which solvers override per probe), so
+  // a probe at or below the essential sum clamps to 1 and never cuts at all.
+  const essentialSpend = sumEssentialExpenses(baselineExpenses ?? [])
+  const spendFloor = annualExpenses > 0 ? Math.min(1, essentialSpend / annualExpenses) : 1
 
   // person.retirementAge is the single retirement definition: salary stops there,
   // and contributions can never outlive the paycheck that funds them — each
@@ -378,8 +387,13 @@ export function runSingleProjection(
           if (baseWithdrawalRate === undefined) {
             baseWithdrawalRate = wr
           } else if (wr > baseWithdrawalRate * (1 + GUARDRAIL_BAND)) {
-            spendMultiplier *= 1 - GUARDRAIL_STEP
-            spendAdjustments.push({ age: yearEndAge, kind: 'cut' })
+            // Trim one step, but never below the essential spending floor — and
+            // don't record a phantom cut once the floor is already binding.
+            const trimmed = Math.max(spendMultiplier * (1 - GUARDRAIL_STEP), spendFloor)
+            if (trimmed < spendMultiplier) {
+              spendMultiplier = trimmed
+              spendAdjustments.push({ age: yearEndAge, kind: 'cut' })
+            }
           } else if (wr < baseWithdrawalRate * (1 - GUARDRAIL_BAND)) {
             spendMultiplier *= 1 + GUARDRAIL_STEP
             spendAdjustments.push({ age: yearEndAge, kind: 'raise' })

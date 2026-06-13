@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { runSingleProjection } from './projection'
 import { ordinaryTax, grossUpOrdinary } from './tax'
 import { defaultInputs, WithdrawalStrategy } from '../schema'
-import type { SimulationInputs } from '../schema'
+import type { ExpenseItem, SimulationInputs } from '../schema'
 
 /** Flat rates (no randomness) for deterministic tests */
 const ZERO_RATES = { stockGrowth: 0, inflation: 0 }
@@ -1138,5 +1138,81 @@ describe('runSingleProjection — guardrails spending policy (#11)', () => {
   it('flat policy always reports a spending floor of 1', () => {
     const flat = runSingleProjection(retiree('flat'), badSequence)
     expect(flat.minSpendMultiplier).toBe(1)
+  })
+})
+
+describe('runSingleProjection — guardrails essential spending floor', () => {
+  // Retiree at 65, single Roth $2M, $60k/yr target, no SS/salary/tax. The
+  // baseline breakdown controls the floor: cuts may not take spending below
+  // the sum of essential items.
+  const guarded = (baselineExpenses: ExpenseItem[], annualExpenses = 60_000) =>
+    inputs({
+      spendingPolicy: 'guardrails',
+      person: {
+        ...defaultInputs().person,
+        currentAge: 65, maxAge: 90, annualSalary: 0, marginalTaxRate: 0, retirementAge: 65,
+      },
+      accounts: [{
+        id: 'a', name: 'Roth', type: 'roth', balance: 2_000_000,
+        contributionAmount: 0, contributionType: 'flat', contributionFrequency: 'monthly',
+        contributionEndAge: 65, withdrawalStartAge: 65,
+      }],
+      annualExpenses,
+      baselineExpenses,
+      socialSecurity: undefined,
+      oneTimeExpenses: [],
+    } as Partial<SimulationInputs>)
+
+  // A relentless decade-long bear: enough triggers that unbounded cuts would
+  // compound well below half the plan (0.9^8 ≈ 0.43).
+  const relentlessBear = [
+    ...new Array<number>(10).fill(-0.2),
+    ...new Array<number>(15).fill(0.03),
+  ].map((g) => ({ stockGrowth: g, inflation: 0 }))
+
+  const halfEssential: ExpenseItem[] = [
+    { id: 'needs', label: 'Needs', category: 'housing', annualAmountPresentDollars: 30_000 },
+    { id: 'wants', label: 'Wants', category: 'discretionary', annualAmountPresentDollars: 30_000 },
+  ]
+  const noneEssential: ExpenseItem[] = halfEssential.map((it) => ({ ...it, essential: false }))
+  const allEssential: ExpenseItem[] = halfEssential.map((it) => ({ ...it, essential: true }))
+
+  it('without a floor the same sequence cuts below the essential share (control)', () => {
+    const run = runSingleProjection(guarded(noneEssential), relentlessBear)
+    expect(run.minSpendMultiplier).toBeLessThan(0.5)
+  })
+
+  it('cuts stop at the essential share of baseline spending', () => {
+    const run = runSingleProjection(guarded(halfEssential), relentlessBear)
+    expect(run.spendAdjustments.some((a) => a.kind === 'cut')).toBe(true)
+    // 30k essential of a 60k plan → multiplier may never drop below 0.5,
+    // and the clamp lands exactly on the floor rather than skipping past it.
+    expect(run.minSpendMultiplier).toBeCloseTo(0.5, 9)
+  })
+
+  it('a fully essential plan never cuts at all', () => {
+    const run = runSingleProjection(guarded(allEssential), relentlessBear)
+    expect(run.spendAdjustments.filter((a) => a.kind === 'cut')).toEqual([])
+    expect(run.minSpendMultiplier).toBe(1)
+  })
+
+  it('a plan already at or below essentials never cuts (floor clamps at 1)', () => {
+    // Solver probes spend levels below the essential sum: 25k plan vs 30k
+    // essential baseline — there is nothing left to cut.
+    const run = runSingleProjection(guarded(halfEssential, 25_000), relentlessBear)
+    expect(run.spendAdjustments.filter((a) => a.kind === 'cut')).toEqual([])
+    expect(run.minSpendMultiplier).toBe(1)
+  })
+
+  it('explicit essential flags override category defaults in the floor', () => {
+    // Same dollars, but the "wants" item is explicitly marked essential and the
+    // "needs" item explicitly not → floor is still 0.5, proving the flag (not
+    // the category) is what counts.
+    const flipped: ExpenseItem[] = [
+      { ...halfEssential[0], essential: false },
+      { ...halfEssential[1], essential: true },
+    ]
+    const run = runSingleProjection(guarded(flipped), relentlessBear)
+    expect(run.minSpendMultiplier).toBeCloseTo(0.5, 9)
   })
 })

@@ -42,7 +42,7 @@ export function MethodologyDrawer({ onClose }: { onClose: () => void }) {
           <MethItem bias="cons" title="Taxes use a flat marginal rate" body="A single rate on traditional withdrawals, with no standard-deduction or bracket-filling, tends to overstate the tax you'll actually pay in retirement — making plans look slightly worse than reality." />
           <MethItem bias="two" title="The plan ends at a fixed age" body="We stop at 95 by default. Plan to 100 and sustainable spending drops; plan to 90 and it rises. Longevity is a genuine unknown — try both." />
           <MethItem bias="two" title="We show magnitude and timing, not pass/fail" body="Instead of a single 'success rate', we show how much you'd need to adjust and roughly when. A plan that needs a small mid-course correction is very different from one that fails early." />
-          <MethItem bias="cons" title="Guardrails turn ruin into a pay cut" body="With guardrails on, spending flexes down ~10% after bad stretches and up after good ones. That lets you start higher and converts most 'failures' into a few leaner years rather than running out." />
+          <MethItem bias="cons" title="Guardrails turn ruin into a pay cut" body="With guardrails on, spending flexes down ~10% after bad stretches and up after good ones. That lets you start higher and converts most 'failures' into a few leaner years rather than running out. Cuts never go below the baseline items marked essential — a plan that can't cover essentials runs out rather than 'succeeding' on an unliveable budget." />
           <div className="micro" style={{ color: 'var(--ink-3)', paddingTop: 14, lineHeight: 1.5 }}>
             We'd rather be honest about uncertainty than show a falsely precise number.
           </div>
