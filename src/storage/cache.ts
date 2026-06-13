@@ -43,8 +43,9 @@ function stableJson(value: unknown): string {
  * v6: optional stochastic longevity (per-run age at death); `longevity` field added.
  * v7: return↔inflation correlation in the sampler (negative; joint path only).
  * v8: IRS contributeMax limits grow with COLA + 50+ catch-up (was frozen nominal).
+ * v9: guardrails cuts bounded by the essential-expense floor (was unbounded).
  */
-const CACHE_VERSION = 8
+const CACHE_VERSION = 9
 
 /** Derive a deterministic cache key from simulation inputs. */
 export function getCacheKey(inputs: SimulationInputs): string {
