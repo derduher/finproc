@@ -144,6 +144,10 @@ describe('grossUpTaxableGain — invert LTCG tax', () => {
     expect(grossUpTaxableGain(30_000, 0, 0, 'single')).toBeCloseTo(30_000, 2)
   })
 
+  it('non-positive net needs no gross-up (returns 0)', () => {
+    expect(grossUpTaxableGain(0, 0.5, 60_000, 'single')).toBe(0)
+  })
+
   it('round-trips with a 50% gain fraction stacked high', () => {
     const net = 30_000
     const gainFrac = 0.5

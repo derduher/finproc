@@ -57,4 +57,38 @@ describe('buildPathNarrative', () => {
     })
     expect(n.points.some((p) => /trimmed in 2 years/i.test(p))).toBe(true)
   })
+
+  it('handles an empty early-retirement window (mean of no returns)', () => {
+    // retireAge past every age in the path → earlyReturns is empty → mean([])=0,
+    // so no sequence-risk point and a steady summary.
+    const returns = Array.from({ length: 6 }, () => 0.05)
+    const n = buildPathNarrative({
+      path: path({ balances: returns.map(() => 500_000), returns, inflation: returns.map(() => 0.03) }),
+      currentAge: 60,
+      retireAge: 99,
+    })
+    expect(n.points.some((p) => /retirement year/i.test(p))).toBe(false)
+    expect(n.summary).toMatch(/steady/i)
+  })
+
+  it('uses the singular "year" when exactly one early retirement year is weak', () => {
+    // ageAt(i)=61+i; retireAge 66, window [66,71) → only i=5 (age 66) qualifies.
+    const returns = [0.1, 0.1, 0.1, 0.1, 0.1, -0.2]
+    const n = buildPathNarrative({
+      path: path({ balances: returns.map(() => 500_000), returns, inflation: returns.map(() => 0.03) }),
+      currentAge: 60,
+      retireAge: 66,
+    })
+    expect(n.points.some((p) => /first 1 retirement year\b/i.test(p))).toBe(true)
+  })
+
+  it('uses the singular "year" when spending was trimmed exactly once', () => {
+    const returns = Array.from({ length: 8 }, () => 0.06)
+    const n = buildPathNarrative({
+      path: path({ balances: returns.map(() => 500_000), returns, inflation: returns.map(() => 0.03), cutYears: [66] }),
+      currentAge: 60,
+      retireAge: 62,
+    })
+    expect(n.points.some((p) => /trimmed in 1 year\b/i.test(p))).toBe(true)
+  })
 })

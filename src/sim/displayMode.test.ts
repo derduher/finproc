@@ -91,6 +91,44 @@ describe('deflateResult', () => {
     expect(out.shortfallByPercentile).toEqual(result.shortfallByPercentile)
   })
 
+  it('passes through legacy results missing p90EndBalance and samplePaths', () => {
+    const inputs = {
+      ...defaultInputs(),
+      person: { ...defaultInputs().person, currentAge: 32, maxAge: 34 },
+      initialInflationMin: 0.02,
+      initialInflationMax: 0.04,
+      breakpoints: [],
+    }
+    // Pre-dates p90EndBalance/samplePaths (legacy cached shape).
+    const result = makeResult({
+      p90EndBalance: undefined as unknown as number,
+      samplePaths: undefined as unknown as MonteCarloResult['samplePaths'],
+    })
+    const out = deflateResult(result, 'real', inputs)
+    expect(out.p90EndBalance).toBeUndefined()
+    expect(out.samplePaths).toEqual([])
+  })
+
+  it('falls back to a synthesized age when a sample path outruns yearlyResults', () => {
+    const inputs = {
+      ...defaultInputs(),
+      person: { ...defaultInputs().person, currentAge: 32, maxAge: 35 },
+      initialInflationMin: 0.02,
+      initialInflationMax: 0.04, // midpoint 3%
+      breakpoints: [],
+    }
+    // 4 balances but only 3 yearlyResults rows → the 4th uses currentAge+i+1.
+    const result = makeResult({
+      samplePaths: [
+        { balances: [1000, 1000, 1000, 1000], depleteAge: undefined, cutYears: [], raiseYears: [] },
+      ],
+    })
+    const out = deflateResult(result, 'real', inputs)
+    // 4th balance (index 3) → age currentAge+3+1 = 36, but deflators clamp to
+    // the last available factor (maxAge 35 → 3 years of 3% inflation).
+    expect(out.samplePaths[0].balances[3]).toBeCloseTo(1000 / Math.pow(1.03, 3), 4)
+  })
+
   it('deflates cashflow fields (contributions, ss, withdrawals)', () => {
     const inputs = {
       ...defaultInputs(),
