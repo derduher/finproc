@@ -76,6 +76,53 @@ describe('scaleExpenseItems', () => {
     // ids/labels/categories preserved
     expect(out.map((i) => i.id)).toEqual(['a', 'b'])
   })
+  it('holds essential items fixed and routes the change to discretionary spend', () => {
+    // Essentials are the guardrails floor — changing the target spend must not
+    // move them, only the discretionary buffer absorbs the difference.
+    const items = [
+      item(30_000, { id: 'a', category: 'housing' }), // essential
+      item(40_000, { id: 'b', category: 'other' }), // discretionary
+    ]
+    const out = scaleExpenseItems(items, 100_000)
+    expect(out.map((i) => i.annualAmountPresentDollars)).toEqual([30_000, 70_000])
+    expect(sumEssentialExpenses(out)).toBe(30_000) // floor unchanged
+  })
+  it('scales multiple discretionary items proportionally while essentials stay fixed', () => {
+    const items = [
+      item(30_000, { id: 'a', category: 'housing' }), // essential
+      item(30_000, { id: 'b', category: 'other' }), // discretionary
+      item(10_000, { id: 'c', category: 'discretionary' }), // discretionary
+    ]
+    // target 110k → 80k discretionary spread over 30k:10k → 60k:20k
+    const out = scaleExpenseItems(items, 110_000)
+    expect(out.map((i) => i.annualAmountPresentDollars)).toEqual([30_000, 60_000, 20_000])
+  })
+  it('scales essentials down and zeros discretionary when target falls below the essential floor', () => {
+    const items = [
+      item(30_000, { id: 'a', category: 'housing' }), // essential
+      item(40_000, { id: 'b', category: 'other' }), // discretionary
+    ]
+    const out = scaleExpenseItems(items, 20_000)
+    expect(out.map((i) => i.annualAmountPresentDollars)).toEqual([20_000, 0])
+    expect(sumExpenseItems(out)).toBe(20_000)
+  })
+  it('falls back to scaling essentials when there is no discretionary bucket', () => {
+    const items = [
+      item(30_000, { id: 'a', category: 'housing' }),
+      item(10_000, { id: 'b', category: 'food' }),
+    ]
+    const out = scaleExpenseItems(items, 80_000)
+    expect(out.map((i) => i.annualAmountPresentDollars)).toEqual([60_000, 20_000])
+  })
+  it('puts the whole change on the first discretionary item when discretionary spend is zero', () => {
+    const items = [
+      item(30_000, { id: 'a', category: 'housing' }), // essential
+      item(0, { id: 'b', category: 'other' }), // discretionary, currently zero
+      item(0, { id: 'c', category: 'discretionary' }), // discretionary, currently zero
+    ]
+    const out = scaleExpenseItems(items, 50_000)
+    expect(out.map((i) => i.annualAmountPresentDollars)).toEqual([30_000, 20_000, 0])
+  })
   it('puts the whole target on the first item when current total is zero', () => {
     const out = scaleExpenseItems([item(0, { id: 'a' }), item(0, { id: 'b' })], 50_000)
     expect(out.map((i) => i.annualAmountPresentDollars)).toEqual([50_000, 0])
