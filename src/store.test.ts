@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
-import { useStore } from './store'
+import { useStore, deriveFirstRunPhase, initialFirstRun } from './store'
 import { defaultInputs } from './schema'
 
 // Reset store state before each test
@@ -13,6 +13,7 @@ beforeEach(() => {
       theme: 'light',
       density: 'comfortable',
       lastCommittedAt: null,
+      firstRun: initialFirstRun(),
     },
   })
 })
@@ -71,6 +72,59 @@ describe('useStore — input mutations', () => {
     })
     expect(result.current.inputs.person.currentAge).toBe(50)
     expect(result.current.inputs.annualExpenses).toBe(defaultInputs().annualExpenses)
+  })
+})
+
+describe('useStore — first-run guess-check', () => {
+  it('starts inactive with no guesses checked', () => {
+    const { result } = renderHook(() => useStore())
+    expect(result.current.ui.firstRun.active).toBe(false)
+    expect(result.current.ui.firstRun.checked).toEqual({ ss: false, match: false, mix: false })
+    expect(result.current.ui.firstRun.bannerDismissed).toBe(false)
+  })
+
+  it('startFirstRun activates the flow and clears prior progress', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => {
+      result.current.confirmGuess('ss')
+      result.current.dismissFirstRunBanner()
+    })
+    act(() => {
+      result.current.startFirstRun()
+    })
+    expect(result.current.ui.firstRun.active).toBe(true)
+    expect(result.current.ui.firstRun.checked).toEqual({ ss: false, match: false, mix: false })
+    expect(result.current.ui.firstRun.bannerDismissed).toBe(false)
+  })
+
+  it('confirmGuess marks a single guess checked', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => {
+      result.current.confirmGuess('match')
+    })
+    expect(result.current.ui.firstRun.checked).toEqual({ ss: false, match: true, mix: false })
+  })
+
+  it('dismissFirstRunBanner hides the banner', () => {
+    const { result } = renderHook(() => useStore())
+    act(() => {
+      result.current.dismissFirstRunBanner()
+    })
+    expect(result.current.ui.firstRun.bannerDismissed).toBe(true)
+  })
+})
+
+describe('deriveFirstRunPhase', () => {
+  it('is "normal" when the flow is inactive', () => {
+    expect(deriveFirstRunPhase({ active: false, checked: { ss: false, match: false, mix: false }, bannerDismissed: false })).toBe('normal')
+  })
+
+  it('is "rough" when active with any unchecked guess', () => {
+    expect(deriveFirstRunPhase({ active: true, checked: { ss: true, match: false, mix: true }, bannerDismissed: false })).toBe('rough')
+  })
+
+  it('is "confirmed" when active and all three are checked', () => {
+    expect(deriveFirstRunPhase({ active: true, checked: { ss: true, match: true, mix: true }, bannerDismissed: false })).toBe('confirmed')
   })
 })
 

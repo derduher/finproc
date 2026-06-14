@@ -9,6 +9,7 @@ import { useUrlSync } from './hooks/useUrlSync'
 export default function App() {
   const inputs = useStore((s) => s.inputs)
   const setInputs = useStore((s) => s.setInputs)
+  const startFirstRun = useStore((s) => s.startFirstRun)
   const aesthetic = useStore((s) => s.ui.aesthetic)
   const theme = useStore((s) => s.ui.theme)
   const density = useStore((s) => s.ui.density)
@@ -58,7 +59,14 @@ export default function App() {
       />
       <div className="hf" data-aesthetic={aesthetic} data-theme={theme} data-density={density} style={{ height: '100%' }}>
         {inputs.accounts.length === 0 && !(initialInputs && initialInputs.accounts.length > 0) ? (
-          <GuidedFirstRun onComplete={setInputs} />
+          <GuidedFirstRun
+            onComplete={(next) => {
+              setInputs(next)
+              // Land on the rough/range result with the guess-check active. This
+              // only fires when the plan is built here, not when restoring a URL.
+              startFirstRun()
+            }}
+          />
         ) : (
           <MainScreen />
         )}

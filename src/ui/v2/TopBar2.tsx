@@ -29,7 +29,16 @@ function copyViaTextarea(text: string): boolean {
   }
 }
 
-export function TopBar2({ onAdvanced, actions = true }: { onAdvanced?: () => void; actions?: boolean }) {
+export function TopBar2({
+  onAdvanced,
+  actions = true,
+  rightNote,
+}: {
+  onAdvanced?: () => void
+  actions?: boolean
+  /** Muted note shown on the right when `actions` is false (e.g. first-run "takes about a minute"). */
+  rightNote?: string
+}) {
   const scenarioName = useStore((s) => s.inputs.scenarioName)
   const [shared, setShared] = useState(false)
 
@@ -73,14 +82,16 @@ export function TopBar2({ onAdvanced, actions = true }: { onAdvanced?: () => voi
           <span style={{ fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scenarioName}</span>
         </div>
       </div>
-      {actions && (
+      {actions ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>
           <button className="btn btn-sm" onClick={onAdvanced}>Advanced</button>
           <button className="btn btn-sm" onClick={share} aria-label={shared ? 'Link copied' : 'Share this plan'}>
             {shared ? 'Copied ✓' : 'Share'}
           </button>
         </div>
-      )}
+      ) : rightNote ? (
+        <span className="muted" style={{ fontSize: 12, flex: 'none' }}>{rightNote}</span>
+      ) : null}
     </div>
   )
 }

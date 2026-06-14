@@ -10,15 +10,27 @@ describe('buildFirstRunInputs', () => {
     expect(() => SimulationInputsSchema.parse(inputs)).not.toThrow()
   })
 
-  it('seeds a 401(k) with the saved balance and annualised contributions', () => {
+  it('splits the saved balance across a 401(k), IRA, and taxable mix that sums to the total', () => {
     const inputs = buildFirstRunInputs(answers)
-    expect(inputs.accounts).toHaveLength(1)
-    const acct = inputs.accounts[0]
-    expect(acct.type).toBe('traditional')
-    expect(acct.balance).toBe(340_000)
-    expect(acct.contributionAmount * 12).toBeCloseTo(2_540 * 12, 0)
-    expect(acct.contributionEndAge).toBe(65)
-    expect(acct.withdrawalStartAge).toBe(65)
+    expect(inputs.accounts).toHaveLength(3)
+    const subtypes = inputs.accounts.map((a) => a.accountSubtype ?? a.type)
+    expect(subtypes).toContain('401k')
+    expect(subtypes).toContain('ira')
+    expect(inputs.accounts.some((a) => a.type === 'taxable')).toBe(true)
+    expect(inputs.accounts.reduce((s, a) => s + a.balance, 0)).toBe(340_000)
+    // The 401(k) holds the most, matching the design's $250k/$60k/$30k shape.
+    const k401 = inputs.accounts.find((a) => a.accountSubtype === '401k')!
+    expect(k401.balance).toBeGreaterThan(inputs.accounts.find((a) => a.accountSubtype === 'ira')!.balance)
+  })
+
+  it('puts the monthly additions and a flat employer match on the 401(k)', () => {
+    const inputs = buildFirstRunInputs(answers)
+    const k401 = inputs.accounts.find((a) => a.accountSubtype === '401k')!
+    expect(k401.type).toBe('traditional')
+    expect(k401.contributionAmount * 12).toBeCloseTo(2_540 * 12, 0)
+    expect(k401.contributionEndAge).toBe(65)
+    expect(k401.withdrawalStartAge).toBe(65)
+    expect(k401.employerMatch).toEqual({ type: 'flat', annualAmount: 6_000 })
   })
 
   it('carries the target spend, ages, and default Social Security', () => {

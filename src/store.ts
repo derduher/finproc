@@ -9,6 +9,32 @@ export type Aesthetic = 'warm' | 'cool' | 'mono'
 export type Theme = 'light' | 'dark'
 export type Density = 'compact' | 'comfortable'
 
+/** The three first-run defaults the user alone can firm up. See `sim/guesses.ts`. */
+export type GuessId = 'ss' | 'match' | 'mix'
+
+/**
+ * Session-only guess-check state for the post-splash first run. Not persisted to
+ * the URL: a shared, complete plan must land on the full screen, not nag with a
+ * rough range. `active` flips true only when this session built the plan via the
+ * guided splash; returning via URL leaves it false.
+ */
+export interface FirstRunState {
+  active: boolean
+  checked: Record<GuessId, boolean>
+  bannerDismissed: boolean
+}
+
+/** A pristine first-run state — inactive, nothing checked or dismissed. */
+export function initialFirstRun(): FirstRunState {
+  return { active: false, checked: { ss: false, match: false, mix: false }, bannerDismissed: false }
+}
+
+/** 'normal' (no first-run overlay) · 'rough' (range hero + guess-check) · 'confirmed'. */
+export function deriveFirstRunPhase(fr: FirstRunState): 'normal' | 'rough' | 'confirmed' {
+  if (!fr.active) return 'normal'
+  return fr.checked.ss && fr.checked.match && fr.checked.mix ? 'confirmed' : 'rough'
+}
+
 export interface UiState {
   /** Whether to display values in nominal or real (inflation-adjusted) dollars */
   displayMode: DisplayMode
@@ -20,6 +46,8 @@ export interface UiState {
   density: Density
   /** ms timestamp of the last successful URL commit (used for "auto-saved Ns ago") */
   lastCommittedAt: number | null
+  /** Post-splash guess-check progress (session-only). */
+  firstRun: FirstRunState
 }
 
 export interface Store {
@@ -43,6 +71,13 @@ export interface Store {
   setTheme: (theme: Theme) => void
   setDensity: (density: Density) => void
   setLastCommittedAt: (ts: number) => void
+
+  /** Begin the post-splash guess-check (resets prior progress). */
+  startFirstRun: () => void
+  /** Mark one guess as the user's own figure. */
+  confirmGuess: (id: GuessId) => void
+  /** Dismiss the first-run welcome banner. */
+  dismissFirstRunBanner: () => void
 }
 
 export const useStore = create<Store>((set) => ({
@@ -53,6 +88,7 @@ export const useStore = create<Store>((set) => ({
     theme: 'light',
     density: 'comfortable',
     lastCommittedAt: null,
+    firstRun: initialFirstRun(),
   },
 
   setInputs: (inputs) => set({ inputs }),
@@ -90,4 +126,12 @@ export const useStore = create<Store>((set) => ({
   setDensity: (density) => set((s) => ({ ui: { ...s.ui, density } })),
 
   setLastCommittedAt: (lastCommittedAt) => set((s) => ({ ui: { ...s.ui, lastCommittedAt } })),
+
+  startFirstRun: () => set((s) => ({ ui: { ...s.ui, firstRun: { ...initialFirstRun(), active: true } } })),
+
+  confirmGuess: (id) =>
+    set((s) => ({ ui: { ...s.ui, firstRun: { ...s.ui.firstRun, checked: { ...s.ui.firstRun.checked, [id]: true } } } })),
+
+  dismissFirstRunBanner: () =>
+    set((s) => ({ ui: { ...s.ui, firstRun: { ...s.ui.firstRun, bannerDismissed: true } } })),
 }))
