@@ -6,9 +6,10 @@
  * the store in place; the simulation re-runs through the worker + cache.
  */
 import { useState } from 'react'
-import { useStore } from '../../store'
+import { useStore, deriveFirstRunPhase } from '../../store'
 import { useSimulation } from '../../hooks/useSimulation'
 import { useSustainableSpend } from '../../hooks/useSustainableSpend'
+import { useGuessRange } from '../../hooks/useGuessRange'
 import { useEarliestRetirementAge } from '../../hooks/useEarliestRetirementAge'
 import { useRequiredExtraSavings } from '../../hooks/useRequiredExtraSavings'
 import { deflateResult } from '../../sim/displayMode'
@@ -27,6 +28,9 @@ import { DisclaimerBanner } from './DisclaimerBanner'
 import { PathStories } from './PathStories'
 import { StressTest } from './StressTest'
 import { WhatMoves } from './WhatMoves'
+import { FirstRunBanner } from './FirstRunBanner'
+import { RangeHero } from './RangeHero'
+import { GuessCheck, ConfirmedStrip } from './GuessCheck'
 import { useHistoricalStress } from '../../hooks/useHistoricalStress'
 import { useSensitivity } from '../../hooks/useSensitivity'
 import { useInsights } from '../../hooks/useInsights'
@@ -52,11 +56,18 @@ export function MainScreen() {
   const displayMode = useStore((s) => s.ui.displayMode)
   const setDisplayMode = useStore((s) => s.setDisplayMode)
   const patchInputs = useStore((s) => s.patchInputs)
+  const firstRun = useStore((s) => s.ui.firstRun)
   const [drawer, setDrawer] = useState<null | 'advanced' | 'methodology'>(null)
   const [stressId, setStressId] = useState<string | null>(null)
 
   const { result: rawResult, loading } = useSimulation(inputs)
   const { spend } = useSustainableSpend(inputs)
+
+  // First-run guess-check: a rough range until the three guesses are checked.
+  const phase = deriveFirstRunPhase(firstRun)
+  const rough = phase === 'rough'
+  const uncheckedCount = (['ss', 'match', 'mix'] as const).filter((id) => !firstRun.checked[id]).length
+  const range = useGuessRange(inputs, spend, firstRun.active, firstRun.checked)
   const { age: earliestAge, loading: solvingAge } = useEarliestRetirementAge(inputs)
   // Only solve "save more" when the target spend exceeds what's sustainable.
   const underfunded = spend != null && inputs.annualExpenses > spend
@@ -72,6 +83,7 @@ export function MainScreen() {
     <div className="hf" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       <DisclaimerBanner />
       <TopBar2 onAdvanced={() => setDrawer('advanced')} />
+      {phase !== 'normal' && <FirstRunBanner phase={phase} />}
       <div className="v2-screen" style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ maxWidth: CHART_W, margin: '0 auto' }}>
           {!rawResult ? (
@@ -112,8 +124,9 @@ export function MainScreen() {
 
               return (
                 <>
-                  {/* one-sentence verdict — the answer before the charts */}
-                  {spend != null && (
+                  {/* one-sentence verdict — the answer before the charts. Held back
+                      during the rough first-run phase (progressive reveal). */}
+                  {!rough && spend != null && (
                     <div
                       style={{
                         marginBottom: 18,
@@ -130,7 +143,9 @@ export function MainScreen() {
 
                   {/* hero + levers */}
                   <div className="v2-hero-grid">
-                    {spend == null ? (
+                    {rough ? (
+                      <RangeHero low={range.low} high={range.high} best={spend} uncheckedCount={uncheckedCount} />
+                    ) : spend == null ? (
                       <div>
                         <div className="label" style={{ marginBottom: 8 }}>yearly spending you can sustain in retirement</div>
                         <div className="hero-spend" style={{ fontSize: 76, color: 'var(--ink-3)' }}>…</div>
@@ -165,6 +180,19 @@ export function MainScreen() {
                       <CoreLevers />
                     </div>
                   </div>
+
+                  {/* guess-check: the three things only the user knows live ON the
+                      result, not in a drawer. Collapses to a strip once confirmed. */}
+                  {rough && (
+                    <div style={{ marginBottom: 24 }}>
+                      <GuessCheck swings={range.swings} onOpenAdvanced={() => setDrawer('advanced')} />
+                    </div>
+                  )}
+                  {phase === 'confirmed' && (
+                    <div style={{ marginBottom: 24 }}>
+                      <ConfirmedStrip />
+                    </div>
+                  )}
 
                   {/* chart */}
                   <div style={{ borderTop: '1px solid var(--line)', paddingTop: 22, marginBottom: 18 }}>
@@ -209,40 +237,48 @@ export function MainScreen() {
                     <SpendFloorNote guardrails={guardrails} spendFloorP10={rawResult.spendFloorP10} />
                   </div>
 
-                  {/* two-sided outcome */}
-                  <div className="v2-outcome-grid">
-                    <RiskRead reads={reads} />
-                    <SurplusRead reads={reads} />
-                  </div>
+                  {/* Deeper reads stay hidden during the rough first-run phase and
+                      reveal once the three guesses are confirmed (progressive
+                      reveal). Nothing is removed — returning via URL is 'normal'
+                      and shows everything. */}
+                  {!rough && (
+                    <>
+                      {/* two-sided outcome */}
+                      <div className="v2-outcome-grid">
+                        <RiskRead reads={reads} />
+                        <SurplusRead reads={reads} />
+                      </div>
 
-                  {/* year-by-year path narratives */}
-                  <div style={{ marginTop: 18 }}>
-                    <PathStories
-                      result={result}
-                      currentAge={inputs.person.currentAge}
-                      retireAge={inputs.person.retirementAge}
-                    />
-                  </div>
+                      {/* year-by-year path narratives */}
+                      <div style={{ marginTop: 18 }}>
+                        <PathStories
+                          result={result}
+                          currentAge={inputs.person.currentAge}
+                          retireAge={inputs.person.retirementAge}
+                        />
+                      </div>
 
-                  {/* historical stress test */}
-                  <div style={{ marginTop: 18 }}>
-                    <StressTest stress={stress} selectedId={stressId} onSelect={setStressId} />
-                  </div>
+                      {/* historical stress test */}
+                      <div style={{ marginTop: 18 }}>
+                        <StressTest stress={stress} selectedId={stressId} onSelect={setStressId} />
+                      </div>
 
-                  {/* sensitivity tornado + insight cards */}
-                  <div style={{ marginTop: 18 }}>
-                    <WhatMoves
-                      sensitivity={sensitivityRows}
-                      insights={insightCards}
-                      loading={sensitivityLoading || insightsLoading}
-                    />
-                  </div>
+                      {/* sensitivity tornado + insight cards */}
+                      <div style={{ marginTop: 18 }}>
+                        <WhatMoves
+                          sensitivity={sensitivityRows}
+                          insights={insightCards}
+                          loading={sensitivityLoading || insightsLoading}
+                        />
+                      </div>
 
-                  {/* demoted success + assumptions */}
-                  <div style={{ borderTop: '1px solid var(--line)', paddingTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <HoldChip reads={reads} />
-                    <AssumptionBar maxAge={inputs.person.maxAge} longevity={inputs.longevity ?? 'fixed'} onMethodology={() => setDrawer('methodology')} />
-                  </div>
+                      {/* demoted success + assumptions */}
+                      <div style={{ borderTop: '1px solid var(--line)', paddingTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <HoldChip reads={reads} />
+                        <AssumptionBar maxAge={inputs.person.maxAge} longevity={inputs.longevity ?? 'fixed'} onMethodology={() => setDrawer('methodology')} />
+                      </div>
+                    </>
+                  )}
                 </>
               )
             })()

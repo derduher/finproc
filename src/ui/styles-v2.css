@@ -153,6 +153,56 @@
   border-radius: var(--radius-pill); padding: 2px 8px;
 }
 
+/* ── Guess-check queue (trust without opening Advanced) ───────────── */
+.hf .guess-card {
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line));
+  border-radius: var(--radius-3);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+}
+.hf .gc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 22px 14px;
+}
+.hf .guess-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 13px 22px;
+  border-top: 1px dashed var(--line);
+}
+.hf .guess-row.editing {
+  background: var(--bg-sunk);
+  align-items: flex-start;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+.hf .guess-row.done { padding-top: 10px; padding-bottom: 10px; }
+.hf .swing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.hf .gdot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--line-strong);
+}
+.hf .gdot.on { background: var(--good); border-color: var(--good); }
+
 /* ── Strategy / mode toggle (flat vs guardrails) ──────────────────── */
 .hf .modecard {
   flex: 1; padding: 14px 16px; border-radius: var(--radius-2);

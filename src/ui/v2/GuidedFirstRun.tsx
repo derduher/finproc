@@ -23,6 +23,12 @@ export function buildFirstRunInputs(a: {
   // Salary high enough that, after tax, it covers spending + contributions during
   // working years (avoids spurious pre-retirement drawdown). Refine in Advanced.
   const salary = Math.max(60_000, Math.round((a.targetSpend + addingAnnual) / (1 - 0.24)))
+  // Account-mix guess: split savings ~$250k/$60k/$30k-of-$340k across pre-tax
+  // 401(k) / IRA / taxable. One of the three things only the user knows — the
+  // guess-check surfaces it on the result so it can be corrected.
+  const k401Balance = Math.round((a.saved * 25) / 34)
+  const iraBalance = Math.round((a.saved * 6) / 34)
+  const taxableBalance = a.saved - k401Balance - iraBalance
   return {
     ...base,
     scenarioName: 'My plan',
@@ -40,13 +46,39 @@ export function buildFirstRunInputs(a: {
         id: 'k401',
         name: '401(k)',
         type: 'traditional',
-        balance: a.saved,
+        balance: k401Balance,
         contributionAmount: addingAnnual / 12,
         contributionType: 'flat',
         contributionFrequency: 'monthly',
         contributionEndAge: a.retireAge,
         withdrawalStartAge: a.retireAge,
         accountSubtype: '401k',
+        // Employer-match guess (flat $6k/yr) — a second guess-check item.
+        employerMatch: { type: 'flat', annualAmount: 6_000 },
+      },
+      {
+        id: 'ira',
+        name: 'IRA',
+        type: 'traditional',
+        balance: iraBalance,
+        contributionAmount: 0,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+        contributionEndAge: a.retireAge,
+        withdrawalStartAge: a.retireAge,
+        accountSubtype: 'ira',
+      },
+      {
+        id: 'taxable',
+        name: 'Brokerage',
+        type: 'taxable',
+        balance: taxableBalance,
+        costBasis: taxableBalance,
+        contributionAmount: 0,
+        contributionType: 'flat',
+        contributionFrequency: 'monthly',
+        contributionEndAge: a.retireAge,
+        withdrawalStartAge: a.retireAge,
       },
     ],
     annualExpenses: a.targetSpend,
@@ -126,7 +158,7 @@ export function GuidedFirstRun({ onComplete }: { onComplete: (inputs: Simulation
 
   return (
     <div className="hf" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}>
-      <TopBar2 actions={false} />
+      <TopBar2 actions={false} rightNote="takes about a minute" />
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '44px 32px' }}>
         <div style={{ width: 660 }}>
           <div className="label" style={{ marginBottom: 10 }}>let's get a rough picture</div>
@@ -147,6 +179,7 @@ export function GuidedFirstRun({ onComplete }: { onComplete: (inputs: Simulation
             <BigField pre="$" value={saved} onChange={setSaved} money width={140} />
             <span style={{ color: 'var(--ink-3)' }}>plus</span>
             <BigField pre="$" value={addingMonthly} onChange={setAddingMonthly} money suf="/ mo" width={110} />
+            <span className="micro">defaults to maxing 401(k) + IRA</span>
           </BigAsk>
 
           <BigAsk n="3" q="What would you like to spend each year, once retired?">
@@ -156,7 +189,7 @@ export function GuidedFirstRun({ onComplete }: { onComplete: (inputs: Simulation
 
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 22, marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 12, color: 'var(--ink-3)', maxWidth: 380, lineHeight: 1.5 }}>
-              Defaults we'll assume: a 401(k) for your savings, historical returns, federal tax brackets + FICA, Social Security at 67, tax-optimal withdrawals, plan to age 95. All editable.
+              Defaults we'll assume: a 401(k) / IRA / taxable split for your savings, historical returns, federal tax brackets + FICA, Social Security at 67, tax-optimal withdrawals, plan to age 95. All editable — and we'll flag the three worth checking, right on your results.
             </div>
             <button className="btn btn-primary" style={{ height: 44, padding: '0 22px', fontSize: 15 }} onClick={submit}>
               Show my projection →
