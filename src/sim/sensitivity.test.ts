@@ -85,6 +85,21 @@ describe('runSensitivity — OAT ±20%', () => {
     expect(bondRow!.hiDelta).toBe(0)
   })
 
+  it('falls back to the default bond band and includes a social-security row', () => {
+    // Bond exposure with the bond band UNSET (→ ?? DEFAULT_BOND_BAND) plus a
+    // social-security benefit (→ the SS lever's "present" arm).
+    const bondPlusSS = inputs({
+      ...BASE,
+      accounts: BASE.accounts.map((a) => ({ ...a, stockAllocation: 0.5 })),
+      socialSecurity: { annualAmountPresentDollars: 24_000, claimAge: 67 },
+      annualExpenses: 75_000,
+      // bondGrowthMin/Max intentionally omitted → exercises ?? DEFAULT_BOND_BAND
+    })
+    const results = runSensitivity(bondPlusSS, 30)
+    expect(results.some((r) => r.label.toLowerCase().includes('bond'))).toBe(true)
+    expect(results.some((r) => r.label.toLowerCase().includes('social security'))).toBe(true)
+  })
+
   it('results are sorted by descending absolute impact', () => {
     const results = runSensitivity(BASE, 100)
     const impacts = results.map((r) => Math.max(Math.abs(r.loDelta), Math.abs(r.hiDelta)))

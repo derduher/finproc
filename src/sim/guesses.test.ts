@@ -123,3 +123,15 @@ describe('GUESS_PERTURBATIONS', () => {
     expect(Object.keys(GUESS_PERTURBATIONS).sort()).toEqual(['match', 'mix', 'ss'])
   })
 })
+
+describe('perturbation no-op guards', () => {
+  it('dropEmployerMatch returns the same inputs when no account has a match', () => {
+    const inp = defaultInputs() // accounts: []
+    expect(dropEmployerMatch(inp)).toBe(inp)
+  })
+
+  it('taxableHeavyMix is a no-op when there are no traditional/roth balances to shift', () => {
+    const inp = defaultInputs() // accounts: [] → nothing to shift
+    expect(taxableHeavyMix(inp)).toBe(inp)
+  })
+})

@@ -1,14 +1,9 @@
 import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
+import react, { reactCompilerPreset } from '@vitejs/plugin-react'
+import babel from '@rolldown/plugin-babel'
 
 export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: ['babel-plugin-react-compiler'],
-      },
-    }),
-  ],
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
   test: {
     globals: true,
     environment: 'jsdom',
@@ -31,9 +26,11 @@ export default defineConfig({
       thresholds: {
         lines: 90,
         functions: 90,
-        // Branch threshold is 89% — we're at 89.76%, just under 90%.
-        // The gap is a handful of error-path branches (IDB catch blocks,
-        // window.location edge cases) that are difficult to trigger in jsdom.
+        // Branch threshold is 89% — we're at 89.14% under coverage-v8 v4's
+        // AST-aware branch counting (vitest 4 made this the default, which is
+        // stricter than the v3 measurement). The remaining gap is defensive /
+        // error-path branches (IDB catch blocks, degenerate-rate guards,
+        // window.location edge cases) that are hard to trigger in jsdom.
         branches: 89,
         statements: 90,
       },

@@ -99,3 +99,49 @@ describe('findRequiredExtraSavings', () => {
     expect(lifted).toBeGreaterThanOrEqual(0.9)
   })
 })
+
+describe('withExtraMonthlyContribution — edge branches', () => {
+  it('returns inputs unchanged when there are no accounts', () => {
+    const inp = defaultInputs() // accounts: []
+    expect(withExtraMonthlyContribution(inp, 500)).toBe(inp)
+  })
+
+  it('falls back to the first account when none is still contributing; others untouched', () => {
+    const base = defaultInputs()
+    const inp: SimulationInputs = {
+      ...base,
+      person: { ...base.person, currentAge: 50, annualSalary: 120_000 },
+      accounts: [
+        {
+          id: 'a', name: 'A', type: 'traditional', balance: 100_000, contributionAmount: 600,
+          contributionType: 'flat', contributionFrequency: 'monthly', contributionEndAge: 45, withdrawalStartAge: 60,
+        },
+        {
+          id: 'b', name: 'B', type: 'roth', balance: 50_000, contributionAmount: 0,
+          contributionType: 'flat', contributionFrequency: 'monthly', contributionEndAge: 45, withdrawalStartAge: 60,
+        },
+      ],
+    }
+    const out = withExtraMonthlyContribution(inp, 200)
+    expect(out.accounts[0].contributionAmount).toBeCloseTo(800) // 600/mo flat + 200
+    expect(out.accounts[1]).toBe(inp.accounts[1]) // i !== targetIdx → untouched ref
+  })
+
+  it('normalises a percent-contribution account to a flat monthly amount', () => {
+    const base = defaultInputs()
+    const inp: SimulationInputs = {
+      ...base,
+      person: { ...base.person, currentAge: 40, annualSalary: 120_000 },
+      accounts: [
+        {
+          id: 'a', name: 'A', type: 'traditional', balance: 100_000, contributionAmount: 0.1,
+          contributionType: 'percent', contributionFrequency: 'monthly', contributionEndAge: 60, withdrawalStartAge: 60,
+        },
+      ],
+    }
+    const out = withExtraMonthlyContribution(inp, 100)
+    // 10% of 120k / 12 = 1000/mo, + 100 extra = 1100
+    expect(out.accounts[0].contributionAmount).toBeCloseTo(1100)
+    expect(out.accounts[0].contributionType).toBe('flat')
+  })
+})

@@ -357,4 +357,18 @@ describe('SimAccount — withdrawal', () => {
     const withdrawn = acc.withdraw(5000, 60)
     expect(withdrawn).toBeCloseTo(5000, 5)
   })
+
+  it('withdrawing from an empty balance returns 0', () => {
+    const acc = new SimAccount(makeAccount({ balance: 0 }), 0)
+    expect(acc.withdraw(5000)).toBe(0)
+  })
+})
+
+describe('SimAccount — deposit guard', () => {
+  it('a non-positive deposit is a no-op (no balance or basis change)', () => {
+    const acc = new SimAccount(makeAccount({ type: 'taxable', balance: 1000, costBasis: 1000 }), 0)
+    acc.deposit(0)
+    acc.deposit(-50)
+    expect(acc.getBalance()).toBe(1000)
+  })
 })

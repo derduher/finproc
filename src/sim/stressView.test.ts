@@ -45,6 +45,26 @@ describe('toScenarioView', () => {
     expect(v.troughAge).toBe(66)
   })
 
+  it('falls back to the last balance when no age reaches the anchor', () => {
+    // anchorAge 99 is past every age in the series, so the forEach never sets a
+    // trough → troughBalance stays Infinity and falls back to the last balance.
+    const res: HistoricalScenarioResult = { ...base, anchorAge: 99 }
+    const v = toScenarioView(res, 'nominal', 65)
+    expect(v.troughBalance).toBe(80) // last balance, not Infinity
+    expect(v.troughAge).toBe(99) // unchanged anchor
+  })
+
+  it('handles an empty balance series without producing Infinity/undefined', () => {
+    const res: HistoricalScenarioResult = {
+      ...base,
+      balances: [],
+      realBalances: [],
+    }
+    const v = toScenarioView(res, 'nominal', 65)
+    expect(v.troughBalance).toBe(0)
+    expect(v.endBalance).toBe(0)
+  })
+
   it('carries survival fields through unchanged', () => {
     const v = toScenarioView({ ...base, survived: false, depleteAge: 70 }, 'nominal', 65)
     expect(v.survived).toBe(false)

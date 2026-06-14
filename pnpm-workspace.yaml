@@ -1,2 +1,6 @@
 allowBuilds:
   esbuild: true
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  - vitest@3.2.6
+  - esbuild@0.28.1

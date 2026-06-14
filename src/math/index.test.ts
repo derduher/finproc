@@ -280,4 +280,30 @@ describe('monteCarloDeltaSignificant', () => {
     expect(monteCarloDeltaSignificant(0.6, 0.66, 100)).toBe(false)
     expect(monteCarloDeltaSignificant(0.6, 0.66, 1000)).toBe(true)
   })
+
+  it('returns false when n <= 0 (no samples)', () => {
+    expect(monteCarloDeltaSignificant(0.6, 0.7, 0)).toBe(false)
+  })
+
+  it('degenerate zero-variance rates compare by raw difference', () => {
+    // rateA=1, rateB=0 → both standard errors are 0 → seDiff===0 path.
+    expect(monteCarloDeltaSignificant(1, 0, 100)).toBe(true)
+    // Equal degenerate rates → no difference.
+    expect(monteCarloDeltaSignificant(0, 0, 100)).toBe(false)
+  })
+})
+
+describe('gross-up edge cases', () => {
+  it('taxableWithdrawalGrossUp returns netNeeded when balance is non-positive', () => {
+    expect(taxableWithdrawalGrossUp(1000, 0, 0, 0.15)).toBe(1000)
+  })
+
+  it('taxableWithdrawalGrossUp returns netNeeded when effective rate >= 1 (degenerate)', () => {
+    // all gain, 100% LTCG rate → effectiveRate 1 → guarded passthrough.
+    expect(taxableWithdrawalGrossUp(1000, 100, 0, 1)).toBe(1000)
+  })
+
+  it('traditionalWithdrawalGrossUp returns netNeeded when marginalRate >= 1', () => {
+    expect(traditionalWithdrawalGrossUp(1000, 1)).toBe(1000)
+  })
 })

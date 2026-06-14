@@ -22,11 +22,8 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
-    /* Path aliases */
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    }
+    /* Test files use Node built-ins (process, node:fs, __dirname) */
+    "types": ["node"]
   },
   "include": ["src"]
 }
