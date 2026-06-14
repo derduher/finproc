@@ -14,6 +14,10 @@ permissions:
   id-token: write # required for OIDC role assumption
   contents: read
 
+# Run bundled JS actions on Node 24; Node 20 is being retired from runners.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
