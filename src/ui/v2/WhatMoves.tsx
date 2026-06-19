@@ -26,16 +26,17 @@ function KeyItem({ color, children }: { color: string; children: ReactNode }) {
 }
 
 /**
- * Static how-to-read key for the tornado, colour-matched to HiTornado's bars:
- * right of centre / green = higher success, left / red = lower success, bar
- * length = size of impact, pp = percentage points.
+ * Static how-to-read key for the tornado, matched to how HiTornado actually
+ * encodes its bars: a bar's *colour* is the success delta's sign (green raises
+ * success, red lowers it) and its *side* is the nudge direction (lower-left,
+ * higher-right) — NOT the side meaning "higher/lower success". Length = impact.
  */
 function TornadoKey() {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>
-      <KeyItem color="var(--good)">Right bar → higher success</KeyItem>
-      <KeyItem color="var(--bad)">Left bar → lower success</KeyItem>
-      <span>Longer bar = bigger impact · <strong style={{ fontWeight: 500 }}>pp</strong> = percentage points of success · top row = biggest lever</span>
+      <KeyItem color="var(--good)">Green raises your success rate</KeyItem>
+      <KeyItem color="var(--bad)">Red lowers it</KeyItem>
+      <span>Each row&rsquo;s two bars show nudging that lever down (left) vs up (right) · longer bar = bigger impact · <strong style={{ fontWeight: 500 }}>pp</strong> = percentage points · top row = biggest lever</span>
     </div>
   )
 }
