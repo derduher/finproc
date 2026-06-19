@@ -44,4 +44,14 @@ describe('WhatMoves — sensitivity tornado + insights', () => {
     expect(screen.getByText('Annual expenses')).toBeInTheDocument()
     expect(screen.queryByText(/tax-optimal/i)).not.toBeInTheDocument()
   })
+
+  it('leads with the biggest lever and shows the how-to-read key', () => {
+    // ROWS[0] = Annual expenses, |hiDelta| 0.18 is the larger swing → 18pp.
+    render(<WhatMoves sensitivity={ROWS} insights={[]} loading={false} />)
+    expect(screen.getByText(/biggest lever is Annual expenses/i)).toBeInTheDocument()
+    expect(screen.getByText(/18 percentage points/i)).toBeInTheDocument()
+    expect(screen.getByText(/Green raises your success rate/i)).toBeInTheDocument()
+    expect(screen.getByText(/Red lowers it/i)).toBeInTheDocument()
+    expect(screen.getByText(/down \(left\) vs up \(right\)/i)).toBeInTheDocument()
+  })
 })
