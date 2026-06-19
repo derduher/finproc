@@ -1,6 +1,18 @@
 /* v2 component styles — methodology-aligned redesign.
    Builds on hifi/tokens.css + hifi/styles.css. Token-driven, warm-editorial default. */
 
+/* ── Charts are non-selectable ────────────────────────────────────────
+   The hand-rolled SVG charts carry <text> labels (axis ticks, legends,
+   tooltips). On touch, scrubbing for the tooltip otherwise long-press-
+   selects those labels as if they were document text. Suppress selection,
+   the iOS long-press callout, and the tap highlight across all charts. */
+.hf svg {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ── Top bar (lightweight, single-screen model) ───────────────────── */
 .hf .topbar2 {
   height: 58px;

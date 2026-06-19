@@ -11,8 +11,10 @@
  * Pure/presentational: it renders whatever `samplePaths` + `median` it's given
  * (already deflated to the active display mode by the caller).
  */
-import { useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { formatMoneyAbbreviated } from '../../math'
+import { ageAtFraction, clampDomain, fractionForClientX, panDomain, zoomDomain } from './pathsZoom'
+import type { Domain } from './pathsZoom'
 import type { SamplePath } from '../../sim/montecarlo'
 
 export interface PathExpenseMarker {
@@ -152,6 +154,13 @@ export function PathsChart({
   showExpenses = true,
 }: PathsChartProps) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  // Visible age window for pinch-zoom/pan; null = full range. Refs track the
+  // live touch points (a transient store, not memoised state).
+  const [viewDomain, setViewDomain] = useState<Domain | null>(null)
+  const pointersRef = useRef<Map<number, number>>(new Map())
+  const pinchRef = useRef<{ dist: number; midX: number } | null>(null)
+  const clipId = useId()
+  const ZOOM_MIN_SPAN = 4
   const pad = inline ? { l: 30, r: 12, t: 12, b: 22 } : { l: 58, r: 18, t: 16, b: 34 }
   const cw = width - pad.l - pad.r
   const ch = height - pad.t - pad.b
@@ -201,7 +210,16 @@ export function PathsChart({
   // longevity the cohort outlives it, so extend to the longest series.
   const lastAge = currentAge + n
   const span = Math.max(1, maxAge - currentAge, n)
-  const x = (age: number) => pad.l + ((age - currentAge) / span) * cw
+  // The full age window; zoom/pan narrows it to `domain`. Default (null →
+  // full range) reproduces the original scale exactly. `inline` never zooms.
+  const fullMin = currentAge
+  const fullMax = currentAge + span
+  const domain: Domain = inline
+    ? [fullMin, fullMax]
+    : clampDomain(viewDomain ?? [fullMin, fullMax], fullMin, fullMax, ZOOM_MIN_SPAN)
+  const [viewMin, viewMax] = domain
+  const isZoomed = viewMin > fullMin + 0.001 || viewMax < fullMax - 0.001
+  const x = (age: number) => pad.l + ((age - viewMin) / (viewMax - viewMin)) * cw
   const y = (v: number) => pad.t + ch - (Math.min(v, cap) / cap) * ch
   const linePath = (arr: number[]) =>
     arr.map((v, i) => `${i === 0 ? 'M' : 'L'} ${x(ages[i]).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')
@@ -234,6 +252,15 @@ export function PathsChart({
   const ageTicks = [...new Set(
     [currentAge, retireAge, ssAge, maxAge, lastAge].filter((a): a is number => a != null),
   )]
+  // When zoomed, drop ticks outside the window and add the visible endpoints so
+  // the axis stays readable; otherwise keep the original tick set untouched.
+  const visAges = isZoomed
+    ? [...new Set([
+        Math.ceil(viewMin),
+        ...ageTicks.filter((a) => a >= viewMin && a <= viewMax),
+        Math.floor(viewMax),
+      ])].sort((a, b) => a - b)
+    : ageTicks
 
   // Map a pointer position over the plot rect to the nearest year-column (#4).
   // The overlay rect spans exactly the plot area, so the fraction is scale-correct
@@ -242,9 +269,54 @@ export function PathsChart({
   const onPointerScrub = (e: React.PointerEvent<SVGRectElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     if (rect.width === 0) return
-    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
-    const i = Math.round(currentAge + frac * span - ages[0])
+    const age = ageAtFraction(domain, fractionForClientX(rect, e.clientX))
+    const i = Math.round(age - ages[0])
     setHoverIdx(i >= 0 && i < ages.length ? i : null)
+  }
+
+  // Gesture model: two fingers pinch-zoom + pan the age axis; one finger (or the
+  // mouse) scrubs the readout. Pointer ids are tracked in a ref so a second
+  // finger upgrades the interaction to a pinch mid-gesture.
+  const onChartPointerDown = (e: React.PointerEvent<SVGRectElement>) => {
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    pointersRef.current.set(e.pointerId, e.clientX)
+    if (pointersRef.current.size >= 2) {
+      setHoverIdx(null)
+      pinchRef.current = null
+    } else {
+      onPointerScrub(e)
+    }
+  }
+  const onChartPointerMove = (e: React.PointerEvent<SVGRectElement>) => {
+    if (pointersRef.current.has(e.pointerId)) pointersRef.current.set(e.pointerId, e.clientX)
+    if (pointersRef.current.size >= 2) {
+      const xs = [...pointersRef.current.values()]
+      const dist = Math.abs(xs[0] - xs[1]) || 1
+      const midX = (xs[0] + xs[1]) / 2
+      const rect = e.currentTarget.getBoundingClientRect()
+      const prev = pinchRef.current
+      if (prev && rect.width > 0) {
+        const focusAge = ageAtFraction(domain, fractionForClientX(rect, midX))
+        let next = zoomDomain(domain, dist / prev.dist, focusAge, fullMin, fullMax, ZOOM_MIN_SPAN)
+        // Translate the window by how far the two-finger midpoint moved.
+        const panAge = (-(midX - prev.midX) / rect.width) * (next[1] - next[0])
+        next = panDomain(next, panAge, fullMin, fullMax)
+        setViewDomain(next)
+      }
+      pinchRef.current = { dist, midX }
+      return
+    }
+    onPointerScrub(e)
+  }
+  const onChartPointerEnd = (e: React.PointerEvent<SVGRectElement>) => {
+    pointersRef.current.delete(e.pointerId)
+    if (pointersRef.current.size < 2) pinchRef.current = null
+  }
+  const onChartWheel = (e: React.WheelEvent<SVGRectElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (rect.width === 0) return
+    const focusAge = ageAtFraction(domain, fractionForClientX(rect, e.clientX))
+    setViewDomain(zoomDomain(domain, e.deltaY < 0 ? 1.15 : 1 / 1.15, focusAge, fullMin, fullMax, ZOOM_MIN_SPAN))
   }
 
   return (
@@ -255,6 +327,14 @@ export function PathsChart({
       role="img"
       aria-label="Projected portfolio paths"
     >
+      {/* Clip the plotted data to the plot area so zoomed paths don't bleed over
+          the axes, legend, or labels (which live outside this group). */}
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={pad.l} y={pad.t} width={cw} height={ch} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
       {/* gridlines */}
       {showAxes &&
         yTicks.map((v, i) => (
@@ -346,6 +426,7 @@ export function PathsChart({
             )}
           </g>
         ))}
+      </g>
 
       {/* axes */}
       {showAxes && (
@@ -357,7 +438,7 @@ export function PathsChart({
               {i === yTicks.length - 1 ? '+' : ''}
             </text>
           ))}
-          {ageTicks.map((a, i) => (
+          {visAges.map((a, i) => (
             <text key={`xt${i}`} x={x(a)} y={pad.t + ch + 16} fontFamily="var(--font-body)" fontSize="11" fill="var(--ink-3)" textAnchor="middle">
               {a}
             </text>
@@ -431,8 +512,9 @@ export function PathsChart({
         )
       })()}
 
-      {/* transparent scrub surface — drawn last so it captures pointer/touch over
-          the whole plot; the readout above sits on top with pointerEvents none. */}
+      {/* transparent scrub/gesture surface — drawn last so it captures
+          pointer/touch over the whole plot; the readout above sits on top with
+          pointerEvents none. touchAction 'none' lets us own pinch + pan. */}
       {!inline && (
         <rect
           x={pad.l}
@@ -440,11 +522,35 @@ export function PathsChart({
           width={cw}
           height={ch}
           fill="transparent"
-          style={{ touchAction: 'pan-y', cursor: 'crosshair' }}
-          onPointerMove={onPointerScrub}
-          onPointerDown={onPointerScrub}
+          style={{ touchAction: 'none', cursor: 'crosshair' }}
+          onPointerDown={onChartPointerDown}
+          onPointerMove={onChartPointerMove}
+          onPointerUp={onChartPointerEnd}
+          onPointerCancel={onChartPointerEnd}
           onPointerLeave={() => setHoverIdx(null)}
+          onWheel={onChartWheel}
+          onDoubleClick={() => setViewDomain(null)}
         />
+      )}
+
+      {/* reset-zoom pill — above the scrub surface so it stays tappable; an
+          accessible, non-gesture way back to the full range. */}
+      {!inline && isZoomed && (
+        <g
+          transform={`translate(${pad.l + cw - 84}, ${pad.t + 4})`}
+          style={{ cursor: 'pointer' }}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            setViewDomain(null)
+          }}
+          role="button"
+          aria-label="Reset zoom"
+        >
+          <rect width="80" height="22" rx="11" fill="var(--bg-elev)" stroke="var(--line)" strokeWidth="1" />
+          <text x="40" y="15" textAnchor="middle" fontFamily="var(--font-body)" fontSize="11" fill="var(--ink-2)">
+            Reset zoom
+          </text>
+        </g>
       )}
     </svg>
   )
