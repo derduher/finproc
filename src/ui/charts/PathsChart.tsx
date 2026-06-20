@@ -25,8 +25,14 @@ export interface PathExpenseMarker {
 
 export interface ColumnSummary {
   age: number
-  /** Median balance at this age. */
-  median: number
+  /**
+   * Median balance at this age, or `undefined` past the reliable-median horizon.
+   * The median series is trimmed once the cohort is too depleted for a median to
+   * mean anything (see `reliableMedianYears`); the sample paths run longer, so a
+   * hover out there has a spread but no trustworthy median — `undefined` keeps
+   * the readout from re-printing the misleading `$0` the trim removed.
+   */
+  median: number | undefined
   /** ~10th percentile across the shown paths. */
   lo: number
   /** ~90th percentile across the shown paths. */
@@ -39,7 +45,8 @@ export interface ColumnSummary {
 /**
  * Summarise one year-column of the spaghetti chart for the hover readout (#4):
  * the median, the spread across the shown sample paths, and how many have
- * depleted by that age. Pure + index-clamped so it never produces NaN.
+ * depleted by that age. Pure + index-clamped so it never produces NaN. The
+ * median is `undefined` past the (possibly shorter) median series.
  */
 export function summarizeColumn(
   pathValues: number[][],
@@ -57,7 +64,8 @@ export function summarizeColumn(
     return vals[k]
   }
   const depleted = samplePaths.filter((p) => p.depleteAge !== undefined && p.depleteAge <= age).length
-  return { age, median: medianSeries[i] ?? 0, lo: q(0.1), hi: q(0.9), depleted, total: samplePaths.length }
+  const median = i < medianSeries.length ? medianSeries[i] : undefined
+  return { age, median, lo: q(0.1), hi: q(0.9), depleted, total: samplePaths.length }
 }
 
 /**
@@ -491,7 +499,8 @@ export function PathsChart({
       {!inline && hoverIdx != null && (() => {
         const sum = summarizeColumn(pathSeries, medianSeries, samplePaths, ages, hoverIdx)
         const hx = x(ages[hoverIdx])
-        const my = y(sum.median)
+        // Past the reliable-median horizon the median is undefined — no dot, no row.
+        const my = sum.median !== undefined ? y(sum.median) : null
         // The highlighted bad-luck path's own drivers that year — ties the
         // "what happened, year by year" words to the picture on hover.
         const detail = badPath ? pathYearDetail(badPath, sum.age, currentAge) : undefined
@@ -502,9 +511,9 @@ export function PathsChart({
         // mutation (keeps the React Compiler happy).
         const rows: { text: string; fill: string; mono?: boolean }[] = [
           { text: `age ${sum.age}`, fill: 'var(--ink-3)' },
-          { text: `median ${formatMoneyAbbreviated(sum.median)}`, fill: 'var(--ink)', mono: true },
-          { text: `most land ${formatMoneyAbbreviated(sum.lo)}–${formatMoneyAbbreviated(sum.hi)}`, fill: 'var(--ink-3)' },
         ]
+        if (sum.median !== undefined) rows.push({ text: `median ${formatMoneyAbbreviated(sum.median)}`, fill: 'var(--ink)', mono: true })
+        rows.push({ text: `most land ${formatMoneyAbbreviated(sum.lo)}–${formatMoneyAbbreviated(sum.hi)}`, fill: 'var(--ink-3)' })
         if (sum.depleted > 0) rows.push({ text: `${sum.depleted} of ${sum.total} run short by here`, fill: 'var(--bad)' })
         if (showDrivers) {
           rows.push({ text: `bad-luck path: ${pct(detail!.stockReturn!)} market · ${pct(detail!.inflation ?? 0)} inflation`, fill: 'var(--bad)' })
@@ -523,7 +532,7 @@ export function PathsChart({
         return (
           <g pointerEvents="none">
             <line x1={hx} y1={pad.t} x2={hx} y2={pad.t + ch} stroke="var(--ink-2)" strokeWidth="1" strokeDasharray="2 3" />
-            <circle cx={hx} cy={my} r="3.5" fill="var(--chart-line)" stroke="var(--bg)" strokeWidth="1" />
+            {my !== null && <circle cx={hx} cy={my} r="3.5" fill="var(--chart-line)" stroke="var(--bg)" strokeWidth="1" />}
             <rect x={bx} y={by} width={boxW} height={boxH} rx="7" fill="var(--bg-elev)" stroke="var(--line)" strokeWidth="1" />
             {rows.map((r, i) => (
               <text key={i} x={bx + 12} y={by + baselines[i]} fontFamily={r.mono ? 'var(--font-mono)' : 'var(--font-body)'} fontSize={r.mono ? 13 : 11} fill={r.fill}>{r.text}</text>

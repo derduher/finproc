@@ -54,6 +54,28 @@ describe('SheetField', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
+    it('closes the sheet on Escape (dialog a11y)', () => {
+      render(
+        <SheetField label="Stock allocation" display="100%">
+          <input aria-label="Stock allocation" defaultValue={100} />
+        </SheetField>,
+      )
+      fireEvent.click(screen.getByRole('button', { name: /Edit Stock allocation/ }))
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('marks the sheet as a modal dialog', () => {
+      render(
+        <SheetField label="Stock allocation" display="100%">
+          <input aria-label="Stock allocation" defaultValue={100} />
+        </SheetField>,
+      )
+      fireEvent.click(screen.getByRole('button', { name: /Edit Stock allocation/ }))
+      expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true')
+    })
+
     it('edits flow through the live control inside the sheet', () => {
       const onChange = vi.fn()
       render(

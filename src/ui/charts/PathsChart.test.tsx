@@ -120,6 +120,22 @@ describe('summarizeColumn (#4 hover readout)', () => {
     expect(Number.isFinite(s.median)).toBe(true)
     expect(Number.isFinite(s.lo)).toBe(true)
   })
+
+  it('reports an undefined median past the (trimmed) median series, not $0', () => {
+    // Median trimmed to the first 2 years; sample paths run the full 4.
+    const trimmedMedian = [100, 95]
+    const s = summarizeColumn(series, trimmedMedian, paths, ages, 3) // age 68, beyond median
+    expect(s.median).toBeUndefined()
+    // The spread across the still-running paths is still reported.
+    expect(Number.isFinite(s.lo)).toBe(true)
+    expect(Number.isFinite(s.hi)).toBe(true)
+  })
+
+  it('still reports the median within the trimmed range', () => {
+    const trimmedMedian = [100, 95]
+    const s = summarizeColumn(series, trimmedMedian, paths, ages, 1) // age 66, within median
+    expect(s.median).toBe(95)
+  })
 })
 
 describe('tooltipBoxPosition (#2 keep the readout inside the plot)', () => {

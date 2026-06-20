@@ -255,7 +255,12 @@
   font: inherit; color: inherit; text-align: left;
 }
 .hf .sheet-trigger-bare .sheet-trigger-v { font: inherit; }
-.hf .sheet.sheet-field { position: fixed; z-index: 40; padding: 18px 18px 28px; }
+.hf .sheet.sheet-field {
+  position: fixed; z-index: 40; padding: 18px 18px 28px;
+  /* Tall content (e.g. the percent-match editor) or a short landscape viewport
+     must never push the handle/title off-screen — cap height and scroll inside. */
+  max-height: 88dvh; overflow-y: auto;
+}
 /* The editor fills the sheet and gets a touch-sized target, overriding the
    compact inline widths the desktop atoms set. */
 .hf .sheet-field-body .intk-in,
@@ -473,6 +478,7 @@
     position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: 100%;
     border-radius: 18px 18px 0 0; z-index: 40; padding: 18px 18px 28px;
     box-shadow: var(--shadow-lg);
+    max-height: 88dvh; overflow-y: auto;
   }
   .hf .ex-pop-arrow { display: none; }
   /* grab handle */

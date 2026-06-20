@@ -10,9 +10,12 @@ import { MoneyInput } from '../../shared/MoneyInput'
 import { SheetField } from '../../shared/SheetField'
 import { INTAKE_STEPS } from '../../../hooks/useIntake'
 
-/** Compose the value preview shown on the mobile sheet trigger. */
+/** Compose the value preview shown on the mobile sheet trigger. A `%`-leading
+ *  suffix hugs the number ("100% stocks"); word suffixes get a space ("6,000 / yr"). */
 function preview(pre: string | undefined, body: string, suf: string | undefined): string {
-  return `${pre ?? ''}${body}${suf ? ` ${suf}` : ''}`
+  if (!suf) return `${pre ?? ''}${body}`
+  const sep = suf.startsWith('%') ? '' : ' '
+  return `${pre ?? ''}${body}${sep}${suf}`
 }
 
 export function Chevron({ s = 11 }: { s?: number }) {

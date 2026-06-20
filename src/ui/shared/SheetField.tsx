@@ -13,6 +13,7 @@
  */
 import { useState, type ReactNode } from 'react'
 import { useIsMobile } from './useIsMobile'
+import { useDialogA11y } from './useDialogA11y'
 
 export interface SheetFieldProps {
   /** Accessible label, also used as the sheet title. */
@@ -29,10 +30,11 @@ export interface SheetFieldProps {
 
 /** The bottom-sheet shell: dimmed backdrop + slide-up panel with a grab handle. */
 function MobileSheet({ title, note, onClose, children }: { title: string; note?: ReactNode; onClose: () => void; children: ReactNode }) {
+  const ref = useDialogA11y<HTMLDivElement>(onClose, { lockScroll: true })
   return (
     <>
       <div className="ex-scrim" aria-hidden onClick={onClose} />
-      <div className="sheet sheet-field" role="dialog" aria-label={`Edit ${title}`}>
+      <div ref={ref} className="sheet sheet-field" role="dialog" aria-modal="true" aria-label={`Edit ${title}`}>
         <div className="grab" />
         <div className="label" style={{ marginBottom: 10 }}>{title}</div>
         <div className="sheet-field-body">{children}</div>
