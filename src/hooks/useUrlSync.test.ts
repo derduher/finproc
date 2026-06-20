@@ -5,9 +5,10 @@ import { defaultInputs } from '../schema'
 
 describe('useUrlSync', () => {
   beforeEach(() => {
-    // Reset URL to clean state
+    // Reset URL to clean state — both the fragment (where we now write) and the
+    // legacy query string (which we still read for back-compat).
     Object.defineProperty(window, 'location', {
-      value: { ...window.location, search: '' },
+      value: { ...window.location, search: '', hash: '', pathname: '/' },
       writable: true,
     })
     vi.useFakeTimers()
@@ -24,7 +25,7 @@ describe('useUrlSync', () => {
   })
 
   it('debounces URL writes by 500ms', async () => {
-    const pushStateSpy = vi.spyOn(window.history, 'pushState').mockImplementation(() => {})
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {})
     const { result } = renderHook(() => useUrlSync())
 
     act(() => {
@@ -32,17 +33,32 @@ describe('useUrlSync', () => {
     })
 
     // Should NOT have written immediately
-    expect(pushStateSpy).not.toHaveBeenCalled()
+    expect(replaceStateSpy).not.toHaveBeenCalled()
 
     // After 500ms → should write
     act(() => {
       vi.advanceTimersByTime(500)
     })
-    expect(pushStateSpy).toHaveBeenCalledTimes(1)
+    expect(replaceStateSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('writes state to the URL fragment (not the server-visible query string), and uses replaceState', () => {
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {})
+    const pushStateSpy = vi.spyOn(window.history, 'pushState').mockImplementation(() => {})
+    const { result } = renderHook(() => useUrlSync())
+
+    act(() => { result.current.syncToUrl(defaultInputs()) })
+    act(() => { vi.advanceTimersByTime(500) })
+
+    const url = replaceStateSpy.mock.calls[0][2] as string
+    expect(url).toContain('#')
+    expect(url).toMatch(/#.*s=/)
+    expect(url).not.toMatch(/\?s=/) // never in the query string
+    expect(pushStateSpy).not.toHaveBeenCalled() // replaceState keeps history clean
   })
 
   it('cancels pending write on unmount', async () => {
-    const pushStateSpy = vi.spyOn(window.history, 'pushState').mockImplementation(() => {})
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {})
     const { result, unmount } = renderHook(() => useUrlSync())
 
     act(() => {
@@ -56,11 +72,11 @@ describe('useUrlSync', () => {
     })
 
     // Should NOT have written (unmounted before debounce fired)
-    expect(pushStateSpy).not.toHaveBeenCalled()
+    expect(replaceStateSpy).not.toHaveBeenCalled()
   })
 
-  it('includes a ?ui= param when prefs are passed', () => {
-    const pushStateSpy = vi.spyOn(window.history, 'pushState').mockImplementation(() => {})
+  it('includes a ui= param in the fragment when prefs are passed', () => {
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {})
     const { result } = renderHook(() => useUrlSync())
 
     act(() => {
@@ -68,14 +84,15 @@ describe('useUrlSync', () => {
     })
     act(() => { vi.advanceTimersByTime(500) })
 
-    expect(pushStateSpy).toHaveBeenCalledTimes(1)
-    const url = pushStateSpy.mock.calls[0][2] as string
+    expect(replaceStateSpy).toHaveBeenCalledTimes(1)
+    const url = replaceStateSpy.mock.calls[0][2] as string
+    expect(url).toContain('#')
     expect(url).toContain('ui=')
     expect(url).toContain('s=')
   })
 
   it('invokes onCommit after the debounced write fires', () => {
-    vi.spyOn(window.history, 'pushState').mockImplementation(() => {})
+    vi.spyOn(window.history, 'replaceState').mockImplementation(() => {})
     const onCommit = vi.fn()
     const { result } = renderHook(() => useUrlSync())
 
@@ -123,5 +140,48 @@ describe('useUrlSync', () => {
     const { result } = renderHook(() => useUrlSync())
     expect(result.current.inputsParseFailed).toBe(false)
     expect(result.current.initialInputs).not.toBeNull()
+  })
+
+  it('reads inputs from the #fragment', async () => {
+    const { compressInputs } = await import('../storage/urlState')
+    const encoded = compressInputs({ ...defaultInputs(), scenarioName: 'From fragment' })
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, search: '', hash: `#s=${encoded}` },
+      writable: true,
+    })
+    const { result } = renderHook(() => useUrlSync())
+    expect(result.current.inputsParseFailed).toBe(false)
+    expect(result.current.initialInputs?.scenarioName).toBe('From fragment')
+  })
+
+  it('reads UI prefs from the #fragment', async () => {
+    const { compressUiPrefs } = await import('../storage/urlState')
+    const encoded = compressUiPrefs({ aesthetic: 'mono', theme: 'dark', density: 'compact' })
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, search: '', hash: `#ui=${encoded}` },
+      writable: true,
+    })
+    const { result } = renderHook(() => useUrlSync())
+    expect(result.current.initialUiPrefs).toEqual({ aesthetic: 'mono', theme: 'dark', density: 'compact' })
+  })
+
+  it('still reads legacy ?s= query links (back-compat), preferring the fragment', async () => {
+    const { compressInputs } = await import('../storage/urlState')
+    const fromQuery = compressInputs({ ...defaultInputs(), scenarioName: 'Legacy query' })
+    const fromHash = compressInputs({ ...defaultInputs(), scenarioName: 'New fragment' })
+
+    // Legacy-only link still loads.
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, search: `?s=${fromQuery}`, hash: '' },
+      writable: true,
+    })
+    expect(renderHook(() => useUrlSync()).result.current.initialInputs?.scenarioName).toBe('Legacy query')
+
+    // When both exist, the fragment wins.
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, search: `?s=${fromQuery}`, hash: `#s=${fromHash}` },
+      writable: true,
+    })
+    expect(renderHook(() => useUrlSync()).result.current.initialInputs?.scenarioName).toBe('New fragment')
   })
 })

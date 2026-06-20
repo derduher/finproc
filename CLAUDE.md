@@ -27,7 +27,7 @@ pnpm test --run -t "seed determinism"
 ### Data flow
 
 ```
-URL (?s=… &u=…)
+URL (#s=… &ui=…  — written to the fragment for privacy; legacy ?s=/?ui= query links still read)
   └─ useUrlSync (lz-string decompress → Zod validate)
        ├─ inputs state (scenario name, accounts, markets segments, expenses, strategy)
        └─ ui state (aesthetic, theme, density, displayMode)
@@ -63,6 +63,7 @@ URL (?s=… &u=…)
 - **Bond asset class** — `Account.stockAllocation?: number` (0–1, omitted = 100% stocks) blends each account's monthly growth between the stock and bond rate streams. `inputs.bondGrowthMin/Max` is a single global P10–P90 band (`DEFAULT_BOND_BAND` = 2–6% when omitted), not per breakpoint. Historical stress tests replay all three streams (`HISTORICAL_SERIES` carries 10-year Treasury total returns); the band drives the Monte Carlo and years outside the replayed window.
 - **Guardrails spending floor** — `ProjectionResult.minSpendMultiplier` (lowest spend level reached per run) and `MonteCarloResult.spendFloorP10` (P10 across runs). ResultsStep shows the floor under the guardrails policy so a "success" that survived by cutting spending is visible. Guardrails cuts are **bounded by the essential share of the baseline breakdown**: `ExpenseItem.essential?: boolean` (unset → category default via `isEssentialExpense`; housing/healthcare/food/transportation/insurance/taxes are essential, `discretionary`/`other` are not) and the multiplier never drops below `sumEssentialExpenses(baselineExpenses) / annualExpenses` (clamped to 1, so a solver probe at/below essentials never cuts). A run that can't cover essentials depletes instead of "succeeding" on an unliveable budget.
 - **Worker progress events** — `simulate(inputs, onProgress?)` emits `{ stage: 'parse'|'sample'|'project'|'aggregate', done: number, total: number }`. `useSimulation` exposes `progress` to the loading UI. In tests, the direct import path accepts `onProgress = undefined`.
+- **Reliable-median horizon** — the per-year `p50`/`p10`/`p90` are computed over *all* runs with depleted runs zero-filled, so the median snaps discontinuously to $0 once depleted runs cross half the cohort (a misleading "spike then crash" at the terminal age). `runMonteCarlo` trims the trailing `yearlyResults` to `reliableMedianYears(balancesByYear)` — the last age where ≥`MEDIAN_DISPLAY_MIN_SOLVENT` (50%) of the runs reaching it are still solvent. Success/`endBalances` stats stay over the full horizon; only the drawn median/band horizon is trimmed. Sample paths still extend to each run's end, so the spaghetti shows late depletions.
 
 ### Simulation internals
 
@@ -90,6 +91,7 @@ URL (?s=… &u=…)
 - `MainScreen` reads: verdict sentence → sustainable-spend hero + levers → PathsChart (spaghetti futures, optional crisis overlay) → risk/surplus reads → PathStories → StressTest → WhatMoves (sensitivity tornado + insight cards) → demoted success chip + assumptions.
 - Design tokens: three aesthetics (`warm` / `cool` / `mono`) × two themes (`light` / `dark`) via `data-aesthetic` / `data-theme` attributes on the root `.hf` element; density via `data-density`. The store + URL prefs round-trip these, but no current UI control changes them (the switchers lived in the deleted v1 TopBar).
 - Animations: `.flow-dash` and `.flow-pulse` are disabled under `@media (prefers-reduced-motion: reduce)`.
+- Mobile inputs: `shared/SheetField` renders its editor inline on desktop and, on phone widths (`shared/useIsMobile`, the `max-width: 768px` breakpoint), as a full-width tap target that opens a bottom sheet (reusing the `.sheet` / `.ex-scrim` styles) so cramped values like "100%" have room. The intake field atoms (`intake/fields.tsx` `NumField`/`MoneyField`/`TextField`) and the Advanced stock-allocation input route through it; native `<select>`s stay inline (the mobile picker is already good). The bottom sheet and the Result Explorer's `ex-pop` edit popover share `shared/useDialogA11y` (focus move-in + trap, Escape-to-close, focus restore, and `lockScroll` body-scroll lock for the full-screen mobile case) and carry `role="dialog"` + `aria-modal`.
 
 ### Key constraints / gotchas
 

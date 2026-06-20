@@ -63,7 +63,7 @@ export const MAX_CONFIDENCE = 0.999
 /** A pristine UI state — default theming, no first-run overlay, 90% confidence. */
 export function initialUiState(): UiState {
   return {
-    displayMode: 'nominal',
+    displayMode: 'real',
     aesthetic: 'warm',
     theme: 'light',
     density: 'comfortable',

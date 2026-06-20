@@ -367,6 +367,10 @@ describe('defaultInputs', () => {
     const inputs = defaultInputs()
     expect(inputs.scenarioName).toBe('Baseline plan')
   })
+
+  it('defaults spendingPolicy to "guardrails"', () => {
+    expect(defaultInputs().spendingPolicy).toBe('guardrails')
+  })
 })
 
 describe('SimulationInputsSchema scenarioName', () => {

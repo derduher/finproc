@@ -11,7 +11,9 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import { MoneyInput } from '../shared/MoneyInput'
-import { totalSaved, annualAdditions } from './CoreLevers'
+import { useIsMobile } from '../shared/useIsMobile'
+import { useDialogA11y } from '../shared/useDialogA11y'
+import { totalSaved, annualAdditions } from './planSummary'
 
 /** Compact USD like the design mock: $88K, $1.2M, $0. */
 export function fmtUSD(v: number): string {
@@ -94,8 +96,13 @@ function EditPopover({
 }) {
   const [draft, setDraft] = useState(initial)
   const fieldLabel = `Edit ${title} value`
+  // On mobile the popover is a full-screen bottom sheet (lock the page scroll);
+  // on desktop it's a small inline popover (don't). Escape + focus management
+  // apply in both.
+  const isMobile = useIsMobile()
+  const ref = useDialogA11y<HTMLDivElement>(onCancel, { lockScroll: isMobile })
   return (
-    <div className="ex-pop" role="dialog" aria-label={`Edit ${title}`}>
+    <div ref={ref} className="ex-pop" role="dialog" aria-modal="true" aria-label={`Edit ${title}`}>
       <div className="ex-pop-arrow" />
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 8, textTransform: 'capitalize' }}>{title}</div>
       <div className="intk-in" style={{ width: '100%', borderColor: 'var(--ink)', boxShadow: '0 0 0 1px var(--ink)' }}>

@@ -1,5 +1,6 @@
 /**
- * Banner shown when a shared URL had an `?s=` param but it failed to decode.
+ * Banner shown when a shared URL had an `s` param (in the `#fragment`, or a
+ * legacy `?query`) but it failed to decode.
  * Sits at the top of the viewport, above the TopBar, until dismissed.
  */
 interface Props {

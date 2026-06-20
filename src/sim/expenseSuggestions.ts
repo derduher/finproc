@@ -17,9 +17,19 @@ export interface ExpenseSuggestion {
   blurb: string
 }
 
+/**
+ * The minimal plan context the catalog predicates read. Decoupled from the full
+ * `SimulationInputs` so the same catalog can drive the intake wizard, where only
+ * a draft (current age + a seeded retirement age) exists yet.
+ */
+export interface ExpensePlanContext {
+  currentAge: number
+  retirementAge: number
+}
+
 /** Catalog entry with an optional applicability predicate. */
 interface CatalogEntry extends ExpenseSuggestion {
-  applies?: (inputs: SimulationInputs) => boolean
+  applies?: (ctx: ExpensePlanContext) => boolean
 }
 
 const CATALOG: CatalogEntry[] = [
@@ -29,7 +39,7 @@ const CATALOG: CatalogEntry[] = [
     category: 'healthcare',
     annualAmountPresentDollars: 12_000,
     blurb: 'ACA premiums + out-of-pocket to bridge from early retirement to Medicare at 65.',
-    applies: (i) => i.person.retirementAge < 65 && i.person.currentAge < 65,
+    applies: (c) => c.retirementAge < 65 && c.currentAge < 65,
   },
   {
     key: 'medicare',
@@ -76,12 +86,33 @@ function strip(entry: CatalogEntry): ExpenseSuggestion {
   return { key, label, category, annualAmountPresentDollars, blurb }
 }
 
-/** Context-aware suggestions: applicable to this plan and not already itemized. */
-export function suggestedExpenses(inputs: SimulationInputs): ExpenseSuggestion[] {
-  const present = new Set(inputs.baselineExpenses.map((it) => it.label.trim().toLowerCase()))
+/** Shared filter: applicable to this plan context and not already itemized. */
+function filterCatalog(ctx: ExpensePlanContext, existingLabels: Iterable<string>): ExpenseSuggestion[] {
+  const present = new Set<string>()
+  for (const label of existingLabels) present.add(label.trim().toLowerCase())
   return CATALOG.filter((entry) => {
-    if (entry.applies && !entry.applies(inputs)) return false
+    if (entry.applies && !entry.applies(ctx)) return false
     if (present.has(entry.label.toLowerCase())) return false
     return true
   }).map(strip)
+}
+
+/** Context-aware suggestions: applicable to this plan and not already itemized. */
+export function suggestedExpenses(inputs: SimulationInputs): ExpenseSuggestion[] {
+  return filterCatalog(
+    { currentAge: inputs.person.currentAge, retirementAge: inputs.person.retirementAge },
+    inputs.baselineExpenses.map((it) => it.label),
+  )
+}
+
+/**
+ * Same catalog + filtering for the intake wizard, where there's no full
+ * `SimulationInputs` yet — pass the draft's age context and the labels already
+ * on the draft so the one-click suggestions stay de-duplicated.
+ */
+export function suggestedExpensesForDraft(
+  ctx: ExpensePlanContext,
+  existingLabels: string[],
+): ExpenseSuggestion[] {
+  return filterCatalog(ctx, existingLabels)
 }

@@ -84,12 +84,9 @@ export const INTAKE_STEPS = [
   { t: 'Social Security', s: 'Expected benefit' },
 ] as const
 
-/** Commonly-missed expenses offered as one-click suggestions in step 3. */
-export const EXPENSE_SUGGESTIONS: ReadonlyArray<Omit<IntakeExpenseDraft, 'id'>> = [
-  { label: 'Medicare + supplements', category: 'healthcare', amount: 7000, period: 'yearly', essential: true },
-  { label: 'Long-term care reserve', category: 'healthcare', amount: 5000, period: 'yearly', essential: true },
-  { label: 'Vehicle replacement', category: 'transportation', amount: 5000, period: 'yearly', essential: false },
-]
+// The step-3 expense suggestions come from the shared, context-aware catalog in
+// `sim/expenseSuggestions` (same source the Advanced drawer uses) — see
+// `suggestedExpensesForDraft`.
 
 let uidCounter = 0
 function uid(prefix: string): string {

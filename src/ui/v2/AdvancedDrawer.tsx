@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import { MoneyInput } from '../shared/MoneyInput'
+import { SheetField } from '../shared/SheetField'
 import { WithdrawalStrategy, EXPENSE_CATEGORIES, DEFAULT_BOND_BAND } from '../../schema'
 import type { Account, OneTimeExpense, ContributionFrequency, ExpenseItem } from '../../schema'
 import { createExpenseItem, isEssentialExpense } from '../../sim/expenses'
@@ -214,6 +215,7 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
                     <span className="micro">holds</span>
+                    <SheetField label="Stock allocation" display={`${Math.round((a.stockAllocation ?? 1) * 100)}% stocks`} triggerClassName="sheet-trigger-bare">
                     <span className="lever-value" style={{ padding: '4px 8px' }}>
                       <input
                         type="number"
@@ -233,6 +235,7 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                       />
                       <span className="lv-suf">% stocks</span>
                     </span>
+                    </SheetField>
                     <span className="micro" style={{ color: 'var(--ink-3)' }}>rest grows at the bond rate</span>
                   </div>
                   {kindSupportsMax(kind) && (
@@ -328,24 +331,24 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
             <div data-testid="baseline-expenses-section">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {baseline.map((it) => (
-                  <div data-baseline-item key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div data-baseline-item key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input
                       aria-label="Baseline expense name"
                       value={it.label}
                       onChange={(e) => updateBaseline(it.id, { label: e.target.value })}
-                      style={{ ...pill, flex: '1 1 130px', minWidth: 110 }}
+                      style={{ ...pill, flex: '1 1 60px', minWidth: 0 }}
                     />
                     <select
                       aria-label="Baseline expense category"
                       value={it.category}
                       onChange={(e) => updateBaseline(it.id, { category: e.target.value as ExpenseItem['category'] })}
-                      style={{ ...pill, textTransform: 'capitalize' }}
+                      style={{ ...pill, textTransform: 'capitalize', flex: '0 1 104px', minWidth: 0 }}
                     >
                       {EXPENSE_CATEGORIES.map((c) => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
-                    <span className="lever-value" style={{ padding: '4px 8px' }}>
+                    <span className="lever-value" style={{ padding: '4px 8px', flex: 'none' }}>
                       <span className="lv-pre">$</span>
                       <input
                         type="number"
@@ -354,10 +357,10 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                         step={500}
                         value={it.annualAmountPresentDollars}
                         onChange={(e) => updateBaseline(it.id, { annualAmountPresentDollars: Math.max(0, Number(e.target.value)) })}
-                        style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: 76 }}
+                        style={{ ...pill, border: 'none', background: 'transparent', padding: 0, width: 64 }}
                       />
                     </span>
-                    <label className="micro" title="Essential items set the guardrails spending floor — market-driven cuts never go below them" style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--ink-2)' }}>
+                    <label className="micro" title="Essential — sets the guardrails spending floor; market-driven cuts never go below it" style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--ink-2)', flex: 'none' }}>
                       <input
                         type="checkbox"
                         aria-label="Essential expense"
@@ -371,6 +374,7 @@ export function AdvancedDrawer({ onClose }: { onClose: () => void }) {
                       aria-label="Remove baseline expense"
                       disabled={baseline.length <= 1}
                       onClick={() => removeBaseline(it.id)}
+                      style={{ flex: 'none' }}
                     >
                       ✕
                     </button>

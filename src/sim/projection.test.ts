@@ -410,6 +410,9 @@ describe('runSingleProjection — SS thresholds are fixed nominal', () => {
         }],
         annualExpenses: 60_000,
         socialSecurity: { claimAge: 65, annualAmountPresentDollars: 30_000 },
+        // This asserts flat-spend mechanics (constant real spend → growing real
+        // withdrawals); guardrails would cut spending and mask it.
+        spendingPolicy: 'flat',
       }),
       { stockGrowth: 0, inflation: 0.08 },
     )

@@ -7,7 +7,16 @@
 import type { ReactNode } from 'react'
 import { Logo } from '../../frame/Logo'
 import { MoneyInput } from '../../shared/MoneyInput'
+import { SheetField } from '../../shared/SheetField'
 import { INTAKE_STEPS } from '../../../hooks/useIntake'
+
+/** Compose the value preview shown on the mobile sheet trigger. A `%`-leading
+ *  suffix hugs the number ("100% stocks"); word suffixes get a space ("6,000 / yr"). */
+function preview(pre: string | undefined, body: string, suf: string | undefined): string {
+  if (!suf) return `${pre ?? ''}${body}`
+  const sep = suf.startsWith('%') ? '' : ' '
+  return `${pre ?? ''}${body}${sep}${suf}`
+}
 
 export function Chevron({ s = 11 }: { s?: number }) {
   return (
@@ -132,29 +141,35 @@ export function FieldCol({ label, hint, children, w }: { label: string; hint?: s
 
 export function NumField({ value, onChange, pre, suf, w, label }: { value: number; onChange: (v: number) => void; pre?: string; suf?: string; w?: number; label: string }) {
   return (
-    <span className="intk-in" style={{ width: w }}>
-      {pre && <span className="pre">{pre}</span>}
-      <input type="number" aria-label={label} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      {suf && <span className="suf">{suf}</span>}
-    </span>
+    <SheetField label={label} display={preview(pre, String(value), suf)}>
+      <span className="intk-in" style={{ width: w }}>
+        {pre && <span className="pre">{pre}</span>}
+        <input type="number" aria-label={label} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+        {suf && <span className="suf">{suf}</span>}
+      </span>
+    </SheetField>
   )
 }
 
 export function MoneyField({ value, onChange, pre = '$', suf, w, label, step = 1000 }: { value: number; onChange: (v: number) => void; pre?: string; suf?: string; w?: number; label: string; step?: number }) {
   return (
-    <span className="intk-in" style={{ width: w }}>
-      {pre && <span className="pre">{pre}</span>}
-      <MoneyInput value={value} onChange={onChange} step={step} aria-label={label} allowEmptyForZero />
-      {suf && <span className="suf">{suf}</span>}
-    </span>
+    <SheetField label={label} display={preview(pre, value.toLocaleString('en-US'), suf)}>
+      <span className="intk-in" style={{ width: w }}>
+        {pre && <span className="pre">{pre}</span>}
+        <MoneyInput value={value} onChange={onChange} step={step} aria-label={label} allowEmptyForZero />
+        {suf && <span className="suf">{suf}</span>}
+      </span>
+    </SheetField>
   )
 }
 
 export function TextField({ value, onChange, w, label }: { value: string; onChange: (v: string) => void; w?: number; label: string }) {
   return (
-    <span className="intk-in text" style={{ width: w }}>
-      <input type="text" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />
-    </span>
+    <SheetField label={label} display={value || '—'}>
+      <span className="intk-in text" style={{ width: w }}>
+        <input type="text" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />
+      </span>
+    </SheetField>
   )
 }
 

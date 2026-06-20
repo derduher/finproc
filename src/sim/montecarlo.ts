@@ -6,6 +6,35 @@ import { mulberry32, boxMullerNormal, p10p90ToMean, p10p90ToSigma, percentile } 
 import { DEFAULT_BOND_BAND } from '../schema'
 import type { SimulationInputs } from '../schema'
 
+/**
+ * Minimum share of the surviving cohort that must still be solvent for a year's
+ * median/band to be drawn. Below 50% the median of the zero-inflated balance
+ * distribution is itself $0, so the line would crash discontinuously at the
+ * terminal age. See {@link reliableMedianYears}.
+ */
+export const MEDIAN_DISPLAY_MIN_SOLVENT = 0.5
+
+/**
+ * How many leading years of the per-year balance accumulator are statistically
+ * reliable to plot as a median/band: the contiguous leading block where at least
+ * `minSolvent` of the runs that *reached* that year are still solvent
+ * (`balance > 0`). Depletion is permanent (depleted runs stay $0), so solvency is
+ * monotone non-increasing across years — the unreliable region is always a
+ * trailing block. Always returns ≥1 so the chart never goes empty. Pure.
+ */
+export function reliableMedianYears(
+  balancesByYear: number[][],
+  minSolvent: number = MEDIAN_DISPLAY_MIN_SOLVENT,
+): number {
+  for (let y = 0; y < balancesByYear.length; y++) {
+    const reached = balancesByYear[y].length
+    if (reached === 0) return Math.max(1, y)
+    const solvent = balancesByYear[y].reduce((n, b) => (b > 0 ? n + 1 : n), 0)
+    if (solvent / reached < minSolvent) return Math.max(1, y)
+  }
+  return Math.max(1, balancesByYear.length)
+}
+
 export interface MonteCarloYearlyResult {
   age: number
   p10: number
@@ -210,6 +239,14 @@ export function runMonteCarlo(
   while (balancesByYear.length > 0 && balancesByYear[balancesByYear.length - 1].length === 0) {
     balancesByYear.pop()
   }
+
+  // Further trim the tail where the median/band stops being statistically
+  // meaningful: once depleted (zero-filled) runs exceed half the cohort, the
+  // median snaps discontinuously to $0 — a misleading "spike then crash" at the
+  // terminal age rather than a real central estimate. Stop the displayed series at
+  // the last age where a majority of the cohort is still solvent.
+  const reliableYears = reliableMedianYears(balancesByYear)
+  if (reliableYears < balancesByYear.length) balancesByYear.length = reliableYears
 
   // Build yearly percentile bands + cashflow medians
   onProgress?.({ stage: 'aggregate', done: 0, total: 1 })

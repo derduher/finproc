@@ -25,16 +25,20 @@ export function HiTornado({ data, width = 460, height }: Props) {
         stroke="var(--line-strong)" strokeWidth={1}
       />
 
-      {/* Header labels */}
+      {/* Header labels — the SIDE encodes the input perturbation direction
+          (left = the input lowered, right = raised); bar COLOUR carries the
+          success effect (green raises success, red lowers it), per the legend.
+          Keep these neutral (ink, not red/green) so they don't imply a success
+          polarity and clash with the colour coding. */}
       <text x={PAD.left + W / 2 - 8} y={PAD.top - 8}
-        textAnchor="end" fill="var(--bad)" fontSize={10}
+        textAnchor="end" fill="var(--ink-3)" fontSize={10}
         fontFamily="var(--font-body)" letterSpacing="0.06em">
-        ← LOWER SUCCESS
+        ← lower input
       </text>
       <text x={PAD.left + W / 2 + 8} y={PAD.top - 8}
-        textAnchor="start" fill="var(--good)" fontSize={10}
+        textAnchor="start" fill="var(--ink-3)" fontSize={10}
         fontFamily="var(--font-body)" letterSpacing="0.06em">
-        HIGHER SUCCESS →
+        higher input →
       </text>
 
       {data.map((d, i) => {
@@ -108,14 +112,14 @@ export function HiTornado({ data, width = 460, height }: Props) {
               <text x={center - loW - 3} y={barY + BAR_H / 2 + 4}
                 textAnchor="end" fill="var(--ink-3)" fontSize={9}
                 fontFamily="var(--font-mono)">
-                {(d.loDelta * 100).toFixed(0)}pp
+                {d.loDelta > 0 ? '+' : ''}{(d.loDelta * 100).toFixed(0)}pp
               </text>
             )}
             {Math.abs(d.hiDelta) > 0.01 && (
               <text x={center + hiW + 3} y={barY + BAR_H / 2 + 4}
                 textAnchor="start" fill="var(--ink-3)" fontSize={9}
                 fontFamily="var(--font-mono)">
-                +{(d.hiDelta * 100).toFixed(0)}pp
+                {d.hiDelta > 0 ? '+' : ''}{(d.hiDelta * 100).toFixed(0)}pp
               </text>
             )}
           </g>
