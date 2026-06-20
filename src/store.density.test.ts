@@ -2,20 +2,10 @@
  * Phase 6: density state round-trips through URL and Frame sets data-density on root.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useStore, initialFirstRun } from './store'
+import { useStore, initialUiState } from './store'
 
 beforeEach(() => {
-  useStore.setState({
-    inputs: useStore.getState().inputs,
-    ui: {
-      displayMode: 'nominal',
-      aesthetic: 'warm',
-      theme: 'light',
-      density: 'comfortable',
-      lastCommittedAt: null,
-      firstRun: initialFirstRun(),
-    },
-  })
+  useStore.setState({ inputs: useStore.getState().inputs, ui: initialUiState() })
 })
 
 describe('density state', () => {

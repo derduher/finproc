@@ -29,6 +29,24 @@ function copyViaTextarea(text: string): boolean {
   }
 }
 
+/**
+ * Auto-save status. The plan round-trips to the URL on a debounce, so once the
+ * first commit lands we can honestly show "Saved HH:MM" — the shareable URL *is*
+ * the saved state. Shows a quiet "Saving…" until the first commit.
+ */
+function SaveStatus({ committedAt }: { committedAt: number | null }) {
+  if (committedAt == null) {
+    return <span className="muted" style={{ fontSize: 12, flex: 'none' }}>Saving…</span>
+  }
+  const time = new Date(committedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return (
+    <span className="muted" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5, flex: 'none' }}>
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden><path d="M2.5 6.5 L5 9 L9.5 3.5" fill="none" stroke="var(--good)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      Saved {time}
+    </span>
+  )
+}
+
 export function TopBar2({
   onAdvanced,
   actions = true,
@@ -40,6 +58,7 @@ export function TopBar2({
   rightNote?: string
 }) {
   const scenarioName = useStore((s) => s.inputs.scenarioName)
+  const lastCommittedAt = useStore((s) => s.ui.lastCommittedAt)
   const [shared, setShared] = useState(false)
 
   const flash = () => {
@@ -79,8 +98,10 @@ export function TopBar2({
         <Logo />
         <div style={{ width: 1, height: 22, background: 'var(--line)', flex: 'none' }} />
         <div className="chip" style={{ gap: 6, minWidth: 0 }}>
+          <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden style={{ flex: 'none', color: 'var(--ink-3)' }}><path d="M2 2h6l2 2v6H2z" fill="none" stroke="currentColor" strokeWidth="1" /><path d="M4 2v3h3" fill="none" stroke="currentColor" strokeWidth="1" /></svg>
           <span style={{ fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scenarioName}</span>
         </div>
+        {actions && <SaveStatus committedAt={lastCommittedAt} />}
       </div>
       {actions ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>

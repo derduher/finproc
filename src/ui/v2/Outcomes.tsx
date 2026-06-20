@@ -164,6 +164,25 @@ export function SaveMoreRead({
   )
 }
 
+/**
+ * Bridge note: the cost of actually spending the full sustainable amount. Only
+ * meaningful for an over-saver (there's headroom above the target to push into);
+ * frames the downside as a guardrails pay-cut, not a cliff.
+ */
+export function PushNote({ reads }: { reads: OutcomeReads }) {
+  if (!reads.isOverSaver) return null
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', border: '1px solid var(--line)', borderRadius: 'var(--radius-3)', background: 'var(--bg-elev)' }}>
+      <svg width="18" height="18" viewBox="0 0 18 18" style={{ flex: 'none', marginTop: 1 }} aria-hidden><path d="M9 14 V4 M5 8 L9 4 L13 8" fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      <div style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+        <b style={{ color: 'var(--ink)' }}>Thinking of spending the full {fmt(reads.sustainable)}/yr?</b> That's where the risk
+        shows up: the worst <span className="num">~1 in 10</span> markets would need a mid-course correction. With
+        guardrails on, that's a few leaner years — trimming spending in down markets — not a cliff.
+      </div>
+    </div>
+  )
+}
+
 /** Demoted secondary metric — the old hero, now a quiet chip. */
 export function HoldChip({ reads }: { reads: OutcomeReads }) {
   return (

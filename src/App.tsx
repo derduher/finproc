@@ -2,14 +2,13 @@
 import { useEffect, useState } from 'react'
 import { UrlParseFailedBanner } from './ui/frame/UrlParseFailedBanner'
 import { MainScreen } from './ui/v2/MainScreen'
-import { GuidedFirstRun } from './ui/v2/GuidedFirstRun'
+import { IntakeWizard } from './ui/v2/intake/IntakeWizard'
 import { useStore } from './store'
 import { useUrlSync } from './hooks/useUrlSync'
 
 export default function App() {
   const inputs = useStore((s) => s.inputs)
   const setInputs = useStore((s) => s.setInputs)
-  const startFirstRun = useStore((s) => s.startFirstRun)
   const aesthetic = useStore((s) => s.ui.aesthetic)
   const theme = useStore((s) => s.ui.theme)
   const density = useStore((s) => s.ui.density)
@@ -59,14 +58,7 @@ export default function App() {
       />
       <div className="hf" data-aesthetic={aesthetic} data-theme={theme} data-density={density} style={{ height: '100%' }}>
         {inputs.accounts.length === 0 && !(initialInputs && initialInputs.accounts.length > 0) ? (
-          <GuidedFirstRun
-            onComplete={(next) => {
-              setInputs(next)
-              // Land on the rough/range result with the guess-check active. This
-              // only fires when the plan is built here, not when restoring a URL.
-              startFirstRun()
-            }}
-          />
+          <IntakeWizard onComplete={(next) => setInputs(next)} />
         ) : (
           <MainScreen />
         )}
