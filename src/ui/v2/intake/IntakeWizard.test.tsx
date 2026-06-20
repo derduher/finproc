@@ -54,6 +54,15 @@ describe('IntakeWizard', () => {
     expect(inputs.accounts.length).toBeGreaterThan(0)
   })
 
+  it('does not let you remove the last account (avoids re-trapping on the wizard)', () => {
+    start()
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ })) // age → accounts
+    const removeButtons = screen.getAllByRole('button', { name: /^Remove / })
+    expect(removeButtons.length).toBe(2)
+    fireEvent.click(removeButtons[0])
+    expect(screen.queryAllByRole('button', { name: /^Remove / }).length).toBe(0)
+  })
+
   it('the rail lets you jump between steps', () => {
     start()
     fireEvent.click(screen.getByRole('button', { name: /One-time costs/ }))

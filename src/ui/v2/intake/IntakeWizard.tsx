@@ -152,7 +152,7 @@ function IntakeAge({ state, dispatch, onNext, onGoto }: StepProps) {
 }
 
 // ════ ② ACCOUNTS ════════════════════════════════════════════════════════════════
-function AccountCard({ a, dispatch }: { a: IntakeAccountDraft; dispatch: Dispatch<IntakeAction> }) {
+function AccountCard({ a, dispatch, canRemove }: { a: IntakeAccountDraft; dispatch: Dispatch<IntakeAction>; canRemove: boolean }) {
   const up = (patch: Partial<IntakeAccountDraft>) => dispatch({ type: 'updateAccount', id: a.id, patch })
   const taxable = a.kind === 'taxable'
   const preTax = a.kind === '401k' || a.kind === 'traditional-ira'
@@ -160,9 +160,13 @@ function AccountCard({ a, dispatch }: { a: IntakeAccountDraft; dispatch: Dispatc
     <div className="intk-card" style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
         <TextField label="Account name" value={a.name} w={260} onChange={(v) => up({ name: v })} />
-        <span style={{ marginLeft: 'auto' }}>
-          <IconButton label={`Remove ${a.name}`} onClick={() => dispatch({ type: 'removeAccount', id: a.id })}>✕</IconButton>
-        </span>
+        {/* Keep at least one account so finishing can't strand the user back on
+            the wizard (the app gates onboarding on accounts.length === 0). */}
+        {canRemove && (
+          <span style={{ marginLeft: 'auto' }}>
+            <IconButton label={`Remove ${a.name}`} onClick={() => dispatch({ type: 'removeAccount', id: a.id })}>✕</IconButton>
+          </span>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <FieldCol label="kind"><SelectField label="Account kind" value={a.kind} options={ACCOUNT_KINDS} w={172} onChange={(v) => up({ kind: v })} /></FieldCol>
@@ -213,7 +217,7 @@ function IntakeAccounts({ state, dispatch, onBack, onNext, onGoto }: StepProps) 
       lead="Add each account — its balance and what you add each year. The kind matters: pre-tax, Roth, and taxable are taxed differently when you draw them down, and we model that."
       onBack={onBack} onNext={onNext} onGoto={onGoto}
       footNote={`${fmtK(total)} across ${accounts.length} account${accounts.length === 1 ? '' : 's'} · contributions default to the IRS annual maximum where they apply.`}>
-      {accounts.map((a) => <AccountCard key={a.id} a={a} dispatch={dispatch} />)}
+      {accounts.map((a) => <AccountCard key={a.id} a={a} dispatch={dispatch} canRemove={accounts.length > 1} />)}
       <AddRowBtn onClick={() => dispatch({ type: 'addAccount' })}>Add an account</AddRowBtn>
     </IntakeShell>
   )

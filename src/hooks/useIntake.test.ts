@@ -170,9 +170,55 @@ describe('buildIntakeInputs', () => {
     expect(ti.type).toBe('traditional')
     expect(ti.accountSubtype).toBe('ira')
     expect(ti.contributeMax).toBeUndefined()
-    expect(ti.contributionAmount).toBe(500)
+    // A manual non-maxed contribution is entered as an annual amount and stored
+    // as the monthly equivalent (the engine reads flat amounts per period).
+    expect(ti.contributionFrequency).toBe('monthly')
+    expect(ti.contributionAmount * 12).toBeCloseTo(500)
     expect(ri.employerMatch).toBeUndefined()
     expect(tx.contributionFrequency).toBe('monthly')
+  })
+
+  it('treats a manual non-maxed tax-advantaged contribution as annual ($/yr ÷ 12)', () => {
+    const d: IntakeDraft = {
+      ...freshDraft(),
+      accounts: [{ id: 'k', name: '401(k)', kind: '401k', balance: 100_000, stockAllocationPct: 100, contributeMax: false, contributionAmount: 12_000 }],
+    }
+    const a = buildIntakeInputs(d).accounts[0]
+    expect(a.contributionFrequency).toBe('monthly')
+    expect(a.contributionAmount).toBe(1_000)
+  })
+
+  it('clamps an invalid draft to a schema-valid plan', () => {
+    const bad: IntakeDraft = {
+      currentAge: 200,
+      salary: -5,
+      planToAge: 10,
+      accounts: [{ id: 'x', name: '   ', kind: '401k', balance: -100, stockAllocationPct: 250, contributeMax: false, contributionAmount: 1_200 }],
+      expenses: [{ id: 'e', label: '   ', category: 'other', amount: -50, period: 'yearly', essential: false }],
+      oneTime: [{ id: 'o', amount: -10, age: 999, label: '   ' }],
+      ss: { monthly: 4_000, claimAge: 80 },
+    }
+    const inputs = buildIntakeInputs(bad)
+    expect(() => SimulationInputsSchema.parse(inputs)).not.toThrow()
+    expect(inputs.person.maxAge).toBeGreaterThan(inputs.person.currentAge)
+    expect(inputs.socialSecurity?.claimAge).toBe(70)
+  })
+
+  it('coerces non-finite field values to safe defaults', () => {
+    const d: IntakeDraft = {
+      currentAge: NaN,
+      salary: NaN,
+      planToAge: NaN,
+      accounts: [{ id: 'a', name: 'A', kind: 'taxable', balance: NaN, stockAllocationPct: NaN, contributionAmount: NaN }],
+      expenses: [],
+      oneTime: [{ id: 'o', amount: NaN, age: NaN, label: 'x' }],
+      ss: { monthly: NaN, claimAge: NaN },
+    }
+    const inputs = buildIntakeInputs(d)
+    expect(() => SimulationInputsSchema.parse(inputs)).not.toThrow()
+    expect(inputs.accounts[0].stockAllocation).toBe(1) // non-finite % → 100% fallback
+    expect(inputs.accounts[0].balance).toBe(0)
+    expect(inputs.socialSecurity).toBeUndefined()
   })
 
   it('omits Social Security when the monthly benefit is zero', () => {

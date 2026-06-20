@@ -169,7 +169,11 @@ export function intakeReducer(state: IntakeState, action: IntakeAction): IntakeS
         },
       }
     case 'removeAccount':
-      return { ...state, draft: { ...state.draft, accounts: state.draft.accounts.filter((a) => a.id !== action.id) } }
+      // Keep at least one account — the app gates onboarding on an empty list,
+      // so emptying it would strand the user back on the wizard.
+      return state.draft.accounts.length <= 1
+        ? state
+        : { ...state, draft: { ...state.draft, accounts: state.draft.accounts.filter((a) => a.id !== action.id) } }
     case 'addExpense':
       return { ...state, draft: { ...state.draft, expenses: [...state.draft.expenses, newExpense(action.preset)] } }
     case 'updateExpense':
@@ -208,22 +212,54 @@ const KIND_MAP: Record<AccountKind, { type: AccountType; subtype?: '401k' | 'ira
   'roth-ira': { type: 'roth', subtype: 'ira' },
 }
 
+/** Round-and-clamp into an integer range, treating NaN/Infinity as the floor. */
+function clampInt(v: number, lo: number, hi: number): number {
+  const n = Math.round(v)
+  if (!Number.isFinite(n)) return lo
+  return Math.max(lo, Math.min(hi, n))
+}
+
+/** Clamp a non-negative dollar amount, treating NaN/Infinity as 0. */
+function nonNeg(v: number): number {
+  return Number.isFinite(v) && v > 0 ? v : 0
+}
+
 function toAccount(d: IntakeAccountDraft, retireAge: number): Account {
   const { type, subtype } = KIND_MAP[d.kind]
   const taxable = type === 'taxable'
+
+  // Taxable accounts enter a per-period amount (with a frequency selector). A
+  // manual non-maxed tax-advantaged contribution is entered as an *annual*
+  // amount ("/ yr" in the UI), so store it as the monthly equivalent — the
+  // engine reads flat `contributionAmount` per `contributionFrequency`.
+  let contributionAmount: number
+  let contributionFrequency: ContributionFrequency
+  if (taxable) {
+    contributionAmount = nonNeg(d.contributionAmount ?? 0)
+    contributionFrequency = d.contributionFrequency ?? 'monthly'
+  } else if (d.contributeMax) {
+    contributionAmount = 0
+    contributionFrequency = 'monthly'
+  } else {
+    contributionAmount = nonNeg(d.contributionAmount ?? 0) / 12
+    contributionFrequency = 'monthly'
+  }
+
+  const balance = nonNeg(d.balance)
+  const pct = Number.isFinite(d.stockAllocationPct) ? d.stockAllocationPct : 100
   const acct: Account = {
     id: d.id,
-    name: d.name,
+    name: d.name.trim() || 'Account',
     type,
-    balance: d.balance,
-    contributionAmount: taxable ? d.contributionAmount ?? 0 : d.contributeMax ? 0 : d.contributionAmount ?? 0,
+    balance,
+    contributionAmount,
     contributionType: 'flat',
-    contributionFrequency: d.contributionFrequency ?? 'monthly',
+    contributionFrequency,
     contributionEndAge: retireAge,
     withdrawalStartAge: retireAge,
-    stockAllocation: Math.max(0, Math.min(1, d.stockAllocationPct / 100)),
+    stockAllocation: Math.max(0, Math.min(1, pct / 100)),
   }
-  if (taxable) acct.costBasis = d.balance
+  if (taxable) acct.costBasis = balance
   if (subtype) acct.accountSubtype = subtype
   if (!taxable && d.contributeMax) acct.contributeMax = true
   // Employer match only applies to pre-tax (traditional) accounts.
@@ -234,45 +270,55 @@ function toAccount(d: IntakeAccountDraft, retireAge: number): Account {
 function toExpenseItem(d: IntakeExpenseDraft): ExpenseItem {
   return {
     id: d.id,
-    label: d.label,
+    label: d.label.trim() || 'Expense',
     category: d.category,
-    annualAmountPresentDollars: d.period === 'monthly' ? Math.round(d.amount * 12) : d.amount,
+    annualAmountPresentDollars: nonNeg(d.period === 'monthly' ? Math.round(d.amount * 12) : d.amount),
     essential: d.essential,
   }
 }
 
 function toOneTime(d: IntakeOneTimeDraft): OneTimeExpense {
-  return { id: d.id, label: d.label, age: d.age, amountPresentDollars: d.amount }
+  return { id: d.id, label: d.label.trim() || 'One-time cost', age: clampInt(d.age, 0, 130), amountPresentDollars: nonNeg(d.amount) }
 }
 
-/** Build a full, validated plan from an intake draft + sensible defaults. */
+/**
+ * Build a full, schema-valid plan from an intake draft + sensible defaults.
+ *
+ * Field-level clamping guards against unconstrained form entry (negative
+ * numbers, ages outside the valid window, blank labels) so the result always
+ * passes `SimulationInputsSchema` — `setInputs` does no validation of its own.
+ */
 export function buildIntakeInputs(draft: IntakeDraft): SimulationInputs {
   const base = defaultInputs()
+  const currentAge = clampInt(draft.currentAge, 0, 100)
+  const maxAge = clampInt(draft.planToAge, currentAge + 1, 130)
   // The intake doesn't ask a retirement age — the result solves the earliest.
   // Seed a conventional baseline (65, clamped into the valid window) that the
   // explorer can then move.
-  const retireAge = Math.min(Math.max(65, draft.currentAge), draft.planToAge)
+  const retireAge = clampInt(Math.max(65, currentAge), currentAge, maxAge)
 
   const baselineExpenses = draft.expenses.map(toExpenseItem)
   const annualExpenses = baselineExpenses.reduce((sum, e) => sum + e.annualAmountPresentDollars, 0)
+
+  const ssMonthly = nonNeg(draft.ss.monthly)
 
   return {
     ...base,
     scenarioName: 'My plan',
     person: {
       ...base.person,
-      currentAge: draft.currentAge,
-      maxAge: draft.planToAge,
+      currentAge,
+      maxAge,
       retirementAge: retireAge,
-      annualSalary: draft.salary,
+      annualSalary: nonNeg(draft.salary),
     },
     accounts: draft.accounts.map((a) => toAccount(a, retireAge)),
     annualExpenses,
     baselineExpenses,
     oneTimeExpenses: draft.oneTime.map(toOneTime),
     socialSecurity:
-      draft.ss.monthly > 0
-        ? { annualAmountPresentDollars: Math.round(draft.ss.monthly * 12), claimAge: draft.ss.claimAge }
+      ssMonthly > 0
+        ? { annualAmountPresentDollars: Math.round(ssMonthly * 12), claimAge: clampInt(draft.ss.claimAge, 62, 70) }
         : undefined,
   }
 }
