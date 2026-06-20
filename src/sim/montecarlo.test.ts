@@ -171,6 +171,23 @@ describe('reliableMedianYears — trims the thin terminal cohort', () => {
     expect(reliableMedianYears([[0, 0]], 0.5)).toBe(1)
     expect(reliableMedianYears([], 0.5)).toBe(1)
   })
+
+  it('trims where too few of the original cohort still REACH the year (stochastic longevity)', () => {
+    // Everyone solvent, but the surviving cohort thins as runs reach their age
+    // at death: 20 → 10 (50%) → 1 (5% < 10% floor). The median over 1 survivor
+    // is the noisy "spike then crash" tail, so trim at the 5% year.
+    const byYear = [
+      Array(20).fill(100),
+      Array(10).fill(100),
+      Array(1).fill(100),
+    ]
+    expect(reliableMedianYears(byYear)).toBe(2)
+  })
+
+  it('does not apply the cohort floor when the full cohort reaches every year (fixed longevity)', () => {
+    const byYear = [Array(20).fill(100), Array(20).fill(100), Array(20).fill(100)]
+    expect(reliableMedianYears(byYear)).toBe(3)
+  })
 })
 
 describe('runMonteCarlo — terminal median is not a $0 cliff', () => {
@@ -382,10 +399,18 @@ describe('runMonteCarlo — stochastic longevity (#10)', () => {
 
   it('the surviving cohort extends past the fixed maxAge, then tapers off', () => {
     const r = runMonteCarlo(retiree(), 1000, 42)
-    const lastAge = r.yearlyResults.at(-1)!.age
-    // Some runs live well past the old hard horizon of 95 (up toward 120).
-    expect(lastAge).toBeGreaterThan(100)
-    expect(lastAge).toBeLessThanOrEqual(120)
+    // The displayed median is trimmed at the reliable-cohort horizon (so the
+    // line doesn't go wild over a handful of old survivors), but it still
+    // outlives the old hard horizon of 95 — it's no longer pinned to maxAge.
+    const medianLastAge = r.yearlyResults.at(-1)!.age
+    expect(medianLastAge).toBeGreaterThan(95)
+    expect(medianLastAge).toBeLessThanOrEqual(120)
+    // Individual runs still live past the trimmed median horizon, toward the
+    // mortality ceiling — the spaghetti shows them even though the median stops.
+    const currentAge = r.yearlyResults[0].age - 1
+    const longestPathAge = currentAge + Math.max(...r.samplePaths.map((p) => p.balances.length))
+    expect(longestPathAge).toBeGreaterThan(medianLastAge)
+    expect(longestPathAge).toBeGreaterThan(100)
   })
 
   it('fixed-horizon success is sensitive to maxAge (the problem #10 removes)', () => {
