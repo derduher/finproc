@@ -48,3 +48,30 @@ describe('HiTornado — bar widths', () => {
     expect(rects.length).toBeGreaterThanOrEqual(baseData.length)
   })
 })
+
+describe('HiTornado — delta labels are sign-correct', () => {
+  it('renders a negative hi delta as "-5pp", never "+-5pp"', () => {
+    render(<HiTornado data={[{ label: 'Retirement age', sub: '±2 years', loDelta: 0, hiDelta: -0.05 }]} />)
+    expect(screen.getByText('-5pp')).toBeInTheDocument()
+    expect(screen.queryByText('+-5pp')).not.toBeInTheDocument()
+  })
+
+  it('renders a positive hi delta with an explicit "+" prefix', () => {
+    render(<HiTornado data={[{ label: 'Stock returns', sub: '±20%', loDelta: 0, hiDelta: 0.05 }]} />)
+    expect(screen.getByText('+5pp')).toBeInTheDocument()
+  })
+})
+
+describe('HiTornado — axis headers describe input direction, not success', () => {
+  it('does not claim the sides encode success direction', () => {
+    render(<HiTornado data={baseData} />)
+    expect(screen.queryByText(/LOWER SUCCESS/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/HIGHER SUCCESS/i)).not.toBeInTheDocument()
+  })
+
+  it('labels the sides by the input perturbation direction', () => {
+    render(<HiTornado data={baseData} />)
+    expect(screen.getByText(/lower input/i)).toBeInTheDocument()
+    expect(screen.getByText(/higher input/i)).toBeInTheDocument()
+  })
+})

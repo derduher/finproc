@@ -203,6 +203,11 @@ describe('useStore — retirement-age cascade', () => {
 })
 
 describe('useStore — UI state', () => {
+  it('defaults displayMode to "real" (today\'s dollars)', () => {
+    const { result } = renderHook(() => useStore())
+    expect(result.current.ui.displayMode).toBe('real')
+  })
+
   it('setDisplayMode toggles nominal/real', () => {
     const { result } = renderHook(() => useStore())
     act(() => {

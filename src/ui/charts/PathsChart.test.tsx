@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { PathsChart, summarizeColumn, pathYearDetail } from './PathsChart'
+import { PathsChart, summarizeColumn, pathYearDetail, tooltipBoxPosition } from './PathsChart'
 import type { SamplePath } from '../../sim/montecarlo'
 
 const paths: SamplePath[] = [
@@ -119,6 +119,37 @@ describe('summarizeColumn (#4 hover readout)', () => {
     const s = summarizeColumn(series, median, paths, ages, 99)
     expect(Number.isFinite(s.median)).toBe(true)
     expect(Number.isFinite(s.lo)).toBe(true)
+  })
+})
+
+describe('tooltipBoxPosition (#2 keep the readout inside the plot)', () => {
+  const pad = { l: 58, t: 16 }
+  const cw = 900
+  const ch = 310
+
+  it('places the box to the right of the hover point when there is room', () => {
+    const { bx, by } = tooltipBoxPosition(400, 184, 120, pad, cw, ch)
+    expect(bx).toBe(412) // hx + 12
+    expect(by).toBe(pad.t + 8)
+  })
+
+  it('clamps the box so it never overflows the right edge', () => {
+    const { bx } = tooltipBoxPosition(940, 184, 120, pad, cw, ch)
+    expect(bx + 184).toBeLessThanOrEqual(pad.l + cw)
+  })
+
+  it('clamps a tall box so its bottom stays inside the plot area', () => {
+    const tallH = 305 // taller than the 8px top offset allows, but still fits the plot
+    const { by } = tooltipBoxPosition(400, 184, tallH, pad, cw, ch)
+    expect(by).toBeLessThan(pad.t + 8) // pulled up from the default top offset
+    expect(by).toBeGreaterThanOrEqual(pad.t)
+    expect(by + tallH).toBeLessThanOrEqual(pad.t + ch + 0.0001)
+  })
+
+  it('keeps the left/top edges inside even when the box is wider/taller than the plot', () => {
+    const { bx, by } = tooltipBoxPosition(940, 2000, 2000, pad, cw, ch)
+    expect(bx).toBeGreaterThanOrEqual(pad.l)
+    expect(by).toBeGreaterThanOrEqual(pad.t)
   })
 })
 

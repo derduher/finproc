@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runMonteCarlo, shortfallAgeAtFraction } from './montecarlo'
+import { runMonteCarlo, shortfallAgeAtFraction, reliableMedianYears } from './montecarlo'
 import { defaultInputs, WithdrawalStrategy } from '../schema'
 import type { SimulationInputs } from '../schema'
 
@@ -141,6 +141,56 @@ describe('runMonteCarlo — percentile aggregation', () => {
     })
     const result = runMonteCarlo(inp, 50, 42)
     expect(result.yearlyResults.length).toBe(75 - 60)
+  })
+})
+
+describe('reliableMedianYears — trims the thin terminal cohort', () => {
+  it('keeps every year while a majority of runs stay solvent', () => {
+    // 4 runs, all solvent every year.
+    const byYear = [
+      [10, 20, 30, 40],
+      [10, 20, 30, 40],
+      [10, 20, 30, 40],
+    ]
+    expect(reliableMedianYears(byYear, 0.5)).toBe(3)
+  })
+
+  it('trims trailing years once fewer than the threshold remain solvent', () => {
+    // Year 0: 4/4 solvent. Year 1: 2/4 solvent (=50%, kept at 0.5).
+    // Year 2: 1/4 solvent (<50%, dropped). Year 3: 0/4 (dropped).
+    const byYear = [
+      [10, 20, 30, 40],
+      [0, 0, 30, 40],
+      [0, 0, 0, 40],
+      [0, 0, 0, 0],
+    ]
+    expect(reliableMedianYears(byYear, 0.5)).toBe(2)
+  })
+
+  it('never trims below one year, even if the first year is already depleted', () => {
+    expect(reliableMedianYears([[0, 0]], 0.5)).toBe(1)
+    expect(reliableMedianYears([], 0.5)).toBe(1)
+  })
+})
+
+describe('runMonteCarlo — terminal median is not a $0 cliff', () => {
+  it('the last reported year has a positive, finite median for a depleting plan', () => {
+    // A strained plan: many runs deplete before maxAge under the guardrails default.
+    const r = runMonteCarlo(
+      inputs({
+        person: { ...defaultInputs().person, currentAge: 60, maxAge: 110, retirementAge: 60, annualSalary: 0 },
+        accounts: [{ ...POOR_ACCOUNT, balance: 600_000, withdrawalStartAge: 60 }],
+        annualExpenses: 55_000,
+        spendingPolicy: 'flat',
+      }),
+      300,
+      42,
+    )
+    const last = r.yearlyResults.at(-1)!
+    expect(Number.isFinite(last.p50)).toBe(true)
+    expect(last.p50).toBeGreaterThan(0)
+    // Trimmed short of the full 50-year horizon because the cohort thins out.
+    expect(r.yearlyResults.length).toBeLessThan(110 - 60)
   })
 })
 

@@ -60,6 +60,27 @@ export function summarizeColumn(
   return { age, median: medianSeries[i] ?? 0, lo: q(0.1), hi: q(0.9), depleted, total: samplePaths.length }
 }
 
+/**
+ * Position the hover readout box so it stays inside the plot rectangle
+ * `[pad.l, pad.l+cw] × [pad.t, pad.t+ch]` (#2). The box is anchored to the right
+ * of the hover point and near the top, then clamped on both axes — so a hover at
+ * the right edge can't push it past the axis and a tall (many-row) box can't
+ * spill below the plot. When the box is larger than the plot it pins to the
+ * top-left corner rather than escaping. Pure + bound-only (no rendering).
+ */
+export function tooltipBoxPosition(
+  hx: number,
+  boxW: number,
+  boxH: number,
+  pad: { l: number; t: number },
+  cw: number,
+  ch: number,
+): { bx: number; by: number } {
+  const bx = Math.max(pad.l, Math.min(hx + 12, pad.l + cw - boxW))
+  const by = Math.max(pad.t, Math.min(pad.t + 8, pad.t + ch - boxH))
+  return { bx, by }
+}
+
 /** One sampled path's drivers for the year ending at a hovered age. */
 export interface PathYearDetail {
   age: number
@@ -498,8 +519,7 @@ export function PathsChart({
           return acc
         }, [])
         const boxH = (baselines[baselines.length - 1] ?? 19) + 8
-        const bx = Math.min(Math.max(hx + 12, pad.l), pad.l + cw - boxW)
-        const by = pad.t + 8
+        const { bx, by } = tooltipBoxPosition(hx, boxW, boxH, pad, cw, ch)
         return (
           <g pointerEvents="none">
             <line x1={hx} y1={pad.t} x2={hx} y2={pad.t + ch} stroke="var(--ink-2)" strokeWidth="1" strokeDasharray="2 3" />

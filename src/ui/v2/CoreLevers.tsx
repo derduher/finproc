@@ -5,6 +5,7 @@
  */
 import { useStore } from '../../store'
 import { MoneyInput } from '../shared/MoneyInput'
+import { SheetField } from '../shared/SheetField'
 import { irsContributionLimit } from '../../sim/irsLimits'
 import type { SimulationInputs } from '../../schema'
 
@@ -78,28 +79,32 @@ export function CoreLevers() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <Lever label="I'm">
-        <input
-          type="number"
-          aria-label="Current age"
-          value={person.currentAge}
-          min={18}
-          max={person.maxAge - 1}
-          style={numInput}
-          onChange={(e) => patchPerson({ currentAge: Number(e.target.value) })}
-        />
-        <span className="lv-suf">yrs old</span>
+        <SheetField label="Current age" display={`${person.currentAge} yrs old`} triggerClassName="sheet-trigger-bare">
+          <input
+            type="number"
+            aria-label="Current age"
+            value={person.currentAge}
+            min={18}
+            max={person.maxAge - 1}
+            style={numInput}
+            onChange={(e) => patchPerson({ currentAge: Number(e.target.value) })}
+          />
+          <span className="lv-suf">yrs old</span>
+        </SheetField>
       </Lever>
 
       <Lever label="Retiring at">
-        <input
-          type="number"
-          aria-label="Retirement age"
-          value={person.retirementAge}
-          min={person.currentAge}
-          max={person.maxAge}
-          style={numInput}
-          onChange={(e) => patchPerson({ retirementAge: Number(e.target.value) })}
-        />
+        <SheetField label="Retirement age" display={String(person.retirementAge)} triggerClassName="sheet-trigger-bare">
+          <input
+            type="number"
+            aria-label="Retirement age"
+            value={person.retirementAge}
+            min={person.currentAge}
+            max={person.maxAge}
+            style={numInput}
+            onChange={(e) => patchPerson({ retirementAge: Number(e.target.value) })}
+          />
+        </SheetField>
       </Lever>
 
       <Lever label="Saved today" sub={`across ${inputs.accounts.length} account${inputs.accounts.length === 1 ? '' : 's'}`}>
@@ -114,15 +119,17 @@ export function CoreLevers() {
       </Lever>
 
       <Lever label="Target spend" focus>
-        <span className="lv-pre">$</span>
-        <MoneyInput
-          aria-label="Target annual spend"
-          value={inputs.annualExpenses}
-          onChange={(v) => setExpensesTotal(v)}
-          step={1000}
-          style={{ ...numInput, width: 90, fontSize: 16 }}
-        />
-        <span className="lv-suf">/ yr</span>
+        <SheetField label="Target annual spend" display={`$${inputs.annualExpenses.toLocaleString('en-US')} / yr`} triggerClassName="sheet-trigger-bare">
+          <span className="lv-pre">$</span>
+          <MoneyInput
+            aria-label="Target annual spend"
+            value={inputs.annualExpenses}
+            onChange={(v) => setExpensesTotal(v)}
+            step={1000}
+            style={{ ...numInput, width: 90, fontSize: 16 }}
+          />
+          <span className="lv-suf">/ yr</span>
+        </SheetField>
       </Lever>
     </div>
   )

@@ -12,7 +12,6 @@ import { EXPENSE_CATEGORIES } from '../../../schema'
 import {
   useIntake,
   buildIntakeInputs,
-  EXPENSE_SUGGESTIONS,
   type IntakeAction,
   type IntakeState,
   type AccountKind,
@@ -20,6 +19,9 @@ import {
   type IntakeExpenseDraft,
   type IntakeOneTimeDraft,
 } from '../../../hooks/useIntake'
+import { suggestedExpensesForDraft } from '../../../sim/expenseSuggestions'
+import { isEssentialExpense } from '../../../sim/expenses'
+import { defaultEmployerMatch, type MatchType } from '../advancedHelpers'
 import {
   IntakeTop,
   IntakeShell,
@@ -55,6 +57,11 @@ const PERIOD_OPTIONS = [
   ['yearly', 'per year'],
   ['monthly', 'per month'],
 ] as const
+
+const MATCH_TYPES: ReadonlyArray<readonly [MatchType, string]> = [
+  ['flat', 'flat $ / yr'],
+  ['percent', '% of salary'],
+]
 
 function annualize(amount: number, period: 'monthly' | 'yearly') {
   return period === 'monthly' ? Math.round(amount * 12) : amount
@@ -194,11 +201,23 @@ function AccountCard({ a, dispatch, canRemove }: { a: IntakeAccountDraft; dispat
           <CB on={!!a.contributeMax} strong onToggle={() => up({ contributeMax: !a.contributeMax })}>contribute the IRS annual maximum</CB>
           {preTax && (
             <div>
-              <CB on={!!a.employerMatch} strong onToggle={() => up({ employerMatch: a.employerMatch ? undefined : { type: 'flat', annualAmount: 6000 } })}>employer match</CB>
-              {a.employerMatch && a.employerMatch.type === 'flat' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, paddingLeft: 28 }}>
-                  <MoneyField label="Employer match amount" value={a.employerMatch.annualAmount} suf="/ yr" w={130}
-                    onChange={(v) => up({ employerMatch: { type: 'flat', annualAmount: v } })} />
+              <CB on={!!a.employerMatch} strong onToggle={() => up({ employerMatch: a.employerMatch ? undefined : defaultEmployerMatch('flat') })}>employer match</CB>
+              {a.employerMatch && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, paddingLeft: 28, flexWrap: 'wrap' }}>
+                  <SelectField label="Match type" value={a.employerMatch.type} options={MATCH_TYPES} w={150}
+                    onChange={(t) => up({ employerMatch: defaultEmployerMatch(t) })} />
+                  {a.employerMatch.type === 'flat' ? (
+                    <MoneyField label="Employer match amount" value={a.employerMatch.annualAmount} suf="/ yr" w={130}
+                      onChange={(v) => up({ employerMatch: { type: 'flat', annualAmount: v } })} />
+                  ) : (
+                    <>
+                      <NumField label="Match percent" value={a.employerMatch.matchPercent} suf="% match" w={110}
+                        onChange={(v) => up({ employerMatch: a.employerMatch?.type === 'percent' ? { ...a.employerMatch, matchPercent: v } : { type: 'percent', matchPercent: v, upToPercent: 6 } })} />
+                      <span className="micro" style={{ color: 'var(--ink-3)' }}>up to</span>
+                      <NumField label="Match up-to percent" value={a.employerMatch.upToPercent} suf="% of pay" w={110}
+                        onChange={(v) => up({ employerMatch: a.employerMatch?.type === 'percent' ? { ...a.employerMatch, upToPercent: v } : { type: 'percent', matchPercent: 50, upToPercent: v } })} />
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -242,9 +261,16 @@ function ExpenseRow({ e, dispatch }: { e: IntakeExpenseDraft; dispatch: Dispatch
 }
 
 function IntakeExpenses({ state, dispatch, onBack, onNext, onGoto }: StepProps) {
-  const { expenses } = state.draft
+  const { expenses, currentAge } = state.draft
   const total = expenses.reduce((s, e) => s + annualize(e.amount, e.period), 0)
   const essential = expenses.filter((e) => e.essential).reduce((s, e) => s + annualize(e.amount, e.period), 0)
+  // Full context-aware catalog (same one the Advanced drawer uses), filtered to
+  // what's not already listed. The wizard hasn't picked a retirement age yet, so
+  // seed the same conventional baseline buildIntakeInputs does (≥65).
+  const suggestions = suggestedExpensesForDraft(
+    { currentAge, retirementAge: Math.max(65, currentAge) },
+    expenses.map((e) => e.label),
+  )
   return (
     <IntakeShell active={2} eyebrow="step 3 of 5 · expenses" title="What will you spend in a typical year?"
       lead="List the spending you expect once retired, in today's dollars. Breaking it into a few lines lets us tell needs from wants — the split that powers the guardrails protecting you in bad markets."
@@ -262,18 +288,36 @@ function IntakeExpenses({ state, dispatch, onBack, onNext, onGoto }: StepProps) 
         {expenses.map((e) => <ExpenseRow key={e.id} e={e} dispatch={dispatch} />)}
       </div>
       <AddRowBtn onClick={() => dispatch({ type: 'addExpense' })}>add an expense</AddRowBtn>
-      <div style={{ marginTop: 22 }}>
-        <div className="micro" style={{ color: 'var(--ink-3)', marginBottom: 10 }}>commonly missed — click to add</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {EXPENSE_SUGGESTIONS.map((s) => (
-            <button key={s.label} className="intk-sugg" onClick={() => dispatch({ type: 'addExpense', preset: s })}>
-              <span style={{ color: 'var(--accent-ink)', fontWeight: 500 }}>+</span>
-              <span>{s.label}</span>
-              <span className="micro" style={{ color: 'var(--ink-3)' }}>{fmtK(annualize(s.amount, s.period))}/yr</span>
-            </button>
-          ))}
+      {suggestions.length > 0 && (
+        <div style={{ marginTop: 22 }}>
+          <div className="micro" style={{ color: 'var(--ink-3)', marginBottom: 10 }}>commonly missed — click to add</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {suggestions.map((s) => (
+              <button
+                key={s.key}
+                className="intk-sugg"
+                title={s.blurb}
+                onClick={() =>
+                  dispatch({
+                    type: 'addExpense',
+                    preset: {
+                      label: s.label,
+                      category: s.category,
+                      amount: s.annualAmountPresentDollars,
+                      period: 'yearly',
+                      essential: isEssentialExpense({ id: '', label: s.label, category: s.category, annualAmountPresentDollars: s.annualAmountPresentDollars }),
+                    },
+                  })
+                }
+              >
+                <span style={{ color: 'var(--accent-ink)', fontWeight: 500 }}>+</span>
+                <span>{s.label}</span>
+                <span className="micro" style={{ color: 'var(--ink-3)' }}>{fmtK(s.annualAmountPresentDollars)}/yr</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </IntakeShell>
   )
 }

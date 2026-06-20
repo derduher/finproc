@@ -235,6 +235,35 @@
 }
 .hf .sheet .grab { width: 36px; height: 4px; border-radius: 3px; background: var(--line-strong); margin: 8px auto 14px; }
 
+/* SheetField — the value tap-target shown inline on phones, and the bottom sheet
+   it opens. The sheet is only rendered on mobile (JS-gated), so fixed bottom
+   positioning + a high z-index over the .ex-scrim backdrop is always correct. */
+.hf .sheet-trigger {
+  display: inline-flex; align-items: center; width: 100%; min-height: 44px;
+  border: 1px solid var(--line-strong); background: var(--bg-elev);
+  border-radius: var(--radius-2); padding: 9px 14px; cursor: pointer;
+  font: inherit; color: var(--ink); text-align: left;
+}
+.hf .sheet-trigger .sheet-trigger-v {
+  font-family: var(--font-mono); font-feature-settings: "tnum"; font-size: 16px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Bare variant: a tap target with no chrome of its own, for embedding inside an
+   existing pill (e.g. the CoreLevers value). */
+.hf .sheet-trigger-bare {
+  border: none; background: transparent; padding: 0; cursor: pointer;
+  font: inherit; color: inherit; text-align: left;
+}
+.hf .sheet-trigger-bare .sheet-trigger-v { font: inherit; }
+.hf .sheet.sheet-field { position: fixed; z-index: 40; padding: 18px 18px 28px; }
+/* The editor fills the sheet and gets a touch-sized target, overriding the
+   compact inline widths the desktop atoms set. */
+.hf .sheet-field-body .intk-in,
+.hf .sheet-field-body .intk-sel,
+.hf .sheet-field-body .lever-value { width: 100% !important; min-height: 46px; }
+/* Override the compact inline widths the desktop inputs carry. */
+.hf .sheet-field-body input { width: 100% !important; font-size: 18px; }
+
 /* tiny legend dot */
 .hf .ldot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: middle; }
 

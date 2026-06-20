@@ -62,7 +62,10 @@ describe('runSensitivity — OAT ±20%', () => {
   it('includes a bond-returns row that moves success for a bond-heavy plan', () => {
     const bondHeavy = {
       ...BASE,
-      // 20/80 with a strained spend so bond returns are load-bearing.
+      // 20/80 with a strained spend so bond returns are load-bearing. Flat spend
+      // (not the guardrails default) so the strain shows up as success-rate
+      // sensitivity rather than being absorbed by spending cuts.
+      spendingPolicy: 'flat' as const,
       accounts: BASE.accounts.map((a) => ({ ...a, stockAllocation: 0.2 })),
       annualExpenses: 75_000,
       bondGrowthMin: 0.04,

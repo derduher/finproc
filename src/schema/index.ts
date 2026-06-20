@@ -387,7 +387,7 @@ export function defaultInputs(): SimulationInputs {
     oneTimeExpenses: [],
     withdrawalStrategy: WithdrawalStrategy.TaxOptimal,
     withdrawalOrder: undefined,
-    spendingPolicy: 'flat',
+    spendingPolicy: 'guardrails',
     longevity: 'fixed',
     seed: 0x4f2a,
   }

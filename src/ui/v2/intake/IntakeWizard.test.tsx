@@ -68,4 +68,28 @@ describe('IntakeWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: /One-time costs/ }))
     expect(screen.getByRole('heading', { name: /one-time expenses/i })).toBeInTheDocument()
   })
+
+  it('offers a percent employer match on a pre-tax account, not just flat (#4)', () => {
+    start()
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ })) // age → accounts
+    // The first seeded account is a 401(k) (pre-tax) → employer match available.
+    fireEvent.click(screen.getByText('employer match'))
+    // Flat by default; switching the type reveals the percent fields.
+    const matchType = screen.getByLabelText('Match type') as HTMLSelectElement
+    expect(screen.queryByLabelText('Match percent')).not.toBeInTheDocument()
+    fireEvent.change(matchType, { target: { value: 'percent' } })
+    expect(screen.getByLabelText('Match percent')).toBeInTheDocument()
+    expect(screen.getByLabelText('Match up-to percent')).toBeInTheDocument()
+  })
+
+  it('shows the full context-aware expense suggestion catalog, not just three (#5)', () => {
+    start()
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ })) // age → accounts
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ })) // accounts → expenses
+    const sugg = document.querySelectorAll('.intk-sugg')
+    expect(sugg.length).toBeGreaterThan(3)
+    // Catalog entries that the old hard-coded trio never offered.
+    expect(screen.getByText('Property tax')).toBeInTheDocument()
+    expect(screen.getByText('Home maintenance')).toBeInTheDocument()
+  })
 })
