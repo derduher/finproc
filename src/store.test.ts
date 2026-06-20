@@ -1,21 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
-import { useStore, deriveFirstRunPhase, initialFirstRun } from './store'
+import { useStore, deriveFirstRunPhase, initialUiState } from './store'
 import { defaultInputs } from './schema'
 
 // Reset store state before each test
 beforeEach(() => {
-  useStore.setState({
-    inputs: defaultInputs(),
-    ui: {
-      displayMode: 'nominal',
-      aesthetic: 'warm',
-      theme: 'light',
-      density: 'comfortable',
-      lastCommittedAt: null,
-      firstRun: initialFirstRun(),
-    },
-  })
+  useStore.setState({ inputs: defaultInputs(), ui: initialUiState() })
 })
 
 describe('useStore — input mutations', () => {

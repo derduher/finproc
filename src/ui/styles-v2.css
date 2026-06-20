@@ -243,6 +243,184 @@
 .hf .v2-hero-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 48px; align-items: start; margin-bottom: 30px; }
 .hf .v2-chart-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 6px; }
 .hf .v2-outcome-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 16px; }
+/* Generic two-up split that collapses to one column on a phone (used by the
+   intake intro + Social Security steps). */
+.hf .v2-split2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: start; }
+
+/* ── Result explorer (interactive confidence + age/spend) ─────────── */
+.hf .ex-card {
+  border: 1px solid var(--line); background: var(--bg-elev);
+  border-radius: var(--radius-3); padding: 18px 20px 20px; box-shadow: var(--shadow-sm);
+}
+.hf .ex-cur { font-family: var(--font-mono); font-size: 13.5px; color: var(--accent-ink); }
+.hf .ex-range {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 6px; border-radius: 999px; outline: none; cursor: pointer;
+  background: var(--bg-sunk);
+}
+.hf .ex-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 20px; height: 20px; border-radius: 999px;
+  background: var(--bg-elev); border: 1.5px solid var(--ink); box-shadow: var(--shadow-sm); cursor: pointer;
+}
+.hf .ex-range::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 999px;
+  background: var(--bg-elev); border: 1.5px solid var(--ink); box-shadow: var(--shadow-sm); cursor: pointer;
+}
+.hf .ex-tradeoff {
+  display: flex; align-items: center; gap: 9px;
+  margin-top: 18px; padding: 11px 14px; border-radius: var(--radius-2);
+  background: var(--accent-soft); color: var(--accent-ink); font-size: 13px; line-height: 1.4;
+}
+.hf .ex-tradeoff b { font-weight: 600; }
+
+/* editable plan strip */
+.hf .ex-planstrip {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 14px 0 18px; margin-bottom: 2px;
+}
+.hf .ex-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 11px; border-radius: var(--radius-2);
+  border: 1px solid var(--line); background: var(--bg-elev); cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.hf .ex-chip:hover { border-color: var(--line-strong); background: var(--bg-sunk); }
+.hf .ex-chip.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.hf .ex-chip-k { font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-3); }
+.hf .ex-chip-v { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+
+/* inline edit popover */
+.hf .ex-pop {
+  position: absolute; top: calc(100% + 10px); left: 0; z-index: 30;
+  width: 268px; padding: 14px; border-radius: var(--radius-3);
+  background: var(--bg-elev); border: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
+}
+.hf .ex-pop-arrow {
+  position: absolute; top: -6px; left: 26px; width: 11px; height: 11px;
+  background: var(--bg-elev); border-left: 1px solid var(--line-strong); border-top: 1px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+.hf .ex-quick {
+  font-size: 12px; padding: 4px 9px; border-radius: var(--radius-pill);
+  border: 1px solid var(--line); color: var(--ink-2); background: var(--bg-elev); cursor: pointer;
+}
+.hf .ex-quick.on { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+
+/* Inline-edit backdrop: inert on desktop, a dimming scrim on a phone (the
+   popover becomes a bottom sheet there). */
+.hf .ex-scrim { display: none; }
+
+/* ── Guided intake wizard ─────────────────────────────────────────── */
+.hf .intk-top {
+  height: 56px; padding: 0 24px; flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--line); background: var(--bg);
+}
+.hf .intk-body { flex: 1; display: flex; min-height: 0; }
+.hf .intk-rail {
+  width: 252px; flex: none; border-right: 1px solid var(--line);
+  padding: 26px 16px 20px; background: var(--bg);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.hf .intk-rail-foot { padding: 14px 12px 0; border-top: 1px solid var(--line); margin-top: 6px; }
+.hf .intk-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hf .intk-main-inner { flex: 1; overflow: auto; padding: 40px 52px 36px; }
+.hf .intk-foot {
+  flex: none; border-top: 1px solid var(--line); padding: 14px 52px;
+  display: flex; justify-content: space-between; align-items: center; gap: 24px;
+  background: var(--bg);
+}
+
+/* rail step */
+.hf .intk-step {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 9px 12px; border-radius: var(--radius-2);
+  color: var(--ink-3); text-align: left; border: none; background: none; cursor: pointer; width: 100%;
+}
+.hf .intk-step.active { background: var(--bg-sunk); color: var(--ink); }
+.hf .intk-step.done { color: var(--ink-2); }
+.hf .intk-step .ix {
+  width: 24px; height: 24px; border-radius: 999px; flex: none;
+  border: 1px solid var(--line-strong); background: var(--bg-elev);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 12px; color: var(--ink-3);
+}
+.hf .intk-step.done .ix { background: var(--good); border-color: var(--good); color: var(--bg); }
+.hf .intk-step.active .ix { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.hf .intk-step .st-t { font-size: 13.5px; font-weight: 500; line-height: 1.3; }
+.hf .intk-step .st-s { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
+
+/* inputs that read as editable */
+.hf .intk-in {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line-strong); background: var(--bg-elev);
+  border-radius: var(--radius-2); padding: 9px 12px; min-height: 38px;
+  font-family: var(--font-mono); font-feature-settings: "tnum"; color: var(--ink);
+}
+.hf .intk-in.text { font-family: var(--font-body); }
+.hf .intk-in .pre { color: var(--ink-3); font-family: var(--font-body); white-space: nowrap; }
+.hf .intk-in .suf { color: var(--ink-3); font-family: var(--font-body); font-size: 13px; white-space: nowrap; }
+.hf .intk-in input {
+  border: none; background: transparent; font: inherit; color: var(--ink);
+  outline: none; width: 100%; min-width: 0; font-feature-settings: "tnum";
+}
+.hf .intk-sel {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1px solid var(--line-strong); background: var(--bg-elev);
+  border-radius: var(--radius-2); padding: 9px 12px; min-height: 38px;
+  color: var(--ink); cursor: pointer; font: inherit;
+}
+.hf .intk-sel select {
+  border: none; background: transparent; font: inherit; color: var(--ink);
+  outline: none; cursor: pointer; -webkit-appearance: none; appearance: none; width: 100%;
+}
+.hf .intk-sel > svg { color: var(--ink-3); flex: none; }
+
+.hf .intk-fc { display: flex; flex-direction: column; gap: 6px; }
+.hf .intk-fc > .label { font-size: 11px; }
+
+/* card (account / SS how-to) */
+.hf .intk-card {
+  border: 1px solid var(--line); background: var(--bg-elev);
+  border-radius: var(--radius-3); padding: 18px; box-shadow: var(--shadow-sm);
+}
+
+/* checkbox row */
+.hf .intk-cbrow { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; }
+.hf .intk-cb {
+  width: 18px; height: 18px; border-radius: 5px; flex: none;
+  border: 1.5px solid var(--line-strong); background: var(--bg-elev);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.hf .intk-cb.on { background: var(--accent); border-color: var(--accent); }
+
+/* expense / one-time row + header */
+.hf .intk-exp { display: flex; align-items: center; gap: 12px; }
+.hf .intk-exp-head {
+  display: flex; gap: 12px; margin-bottom: 10px;
+  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 500;
+}
+
+/* suggestion chip (dashed, click to add) */
+.hf .intk-sugg {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px dashed var(--line-strong); background: transparent;
+  border-radius: var(--radius-2); padding: 9px 13px; color: var(--ink-2);
+  cursor: pointer; font-size: 13.5px; font-family: var(--font-body);
+  transition: border-color .12s, color .12s;
+}
+.hf .intk-sugg:hover { border-color: var(--accent); color: var(--ink); }
+
+/* result stat pill */
+.hf .intk-stat {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 9px 14px; border: 1px solid var(--line); border-radius: var(--radius-2);
+  background: var(--bg-elev);
+}
+.hf .intk-stat .k { font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.hf .intk-stat .v { font-family: var(--font-mono); font-size: 15px; color: var(--ink); }
 
 @media (max-width: 768px) {
   .hf .topbar2 { padding: 0 14px; }
@@ -253,4 +431,21 @@
   .hf .hero-spend { font-size: 56px !important; }
   /* Drawers go full-width on a phone. */
   .hf .drawer { width: 100% !important; }
+  /* Guided intake: collapse the rail and tighten padding. */
+  .hf .intk-rail { display: none; }
+  .hf .intk-main-inner { padding: 22px 16px 24px; }
+  .hf .intk-foot { padding: 12px 16px; }
+  /* Explorer: plan chips scroll horizontally rather than wrap. */
+  .hf .ex-planstrip { flex-wrap: nowrap; overflow-x: auto; }
+  .hf .v2-split2 { grid-template-columns: 1fr; gap: 22px; }
+  /* Inline edit popover becomes a touch bottom sheet with a dimmed backdrop. */
+  .hf .ex-scrim { display: block; position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 32%, transparent); z-index: 39; }
+  .hf .ex-pop {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: 100%;
+    border-radius: 18px 18px 0 0; z-index: 40; padding: 18px 18px 28px;
+    box-shadow: var(--shadow-lg);
+  }
+  .hf .ex-pop-arrow { display: none; }
+  /* grab handle */
+  .hf .ex-pop::before { content: ""; display: block; width: 36px; height: 4px; border-radius: 3px; background: var(--line-strong); margin: 0 auto 14px; }
 }

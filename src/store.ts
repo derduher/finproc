@@ -48,6 +48,29 @@ export interface UiState {
   lastCommittedAt: number | null
   /** Post-splash guess-check progress (session-only). */
   firstRun: FirstRunState
+  /**
+   * The result explorer's confidence slider: a target success rate in [0,1]
+   * passed to the headline solvers (sustainable spend / earliest retirement
+   * age). Session-only — a momentary exploration knob, not a shared preference.
+   */
+  confidenceTarget: number
+}
+
+/** Lowest / highest confidence the slider (and `setConfidenceTarget`) allow. */
+export const MIN_CONFIDENCE = 0.5
+export const MAX_CONFIDENCE = 0.999
+
+/** A pristine UI state — default theming, no first-run overlay, 90% confidence. */
+export function initialUiState(): UiState {
+  return {
+    displayMode: 'nominal',
+    aesthetic: 'warm',
+    theme: 'light',
+    density: 'comfortable',
+    lastCommittedAt: null,
+    firstRun: initialFirstRun(),
+    confidenceTarget: 0.9,
+  }
 }
 
 export interface Store {
@@ -71,6 +94,8 @@ export interface Store {
   setTheme: (theme: Theme) => void
   setDensity: (density: Density) => void
   setLastCommittedAt: (ts: number) => void
+  /** Set the explorer confidence target (clamped to [MIN_CONFIDENCE, MAX_CONFIDENCE]). */
+  setConfidenceTarget: (target: number) => void
 
   /** Begin the post-splash guess-check (resets prior progress). */
   startFirstRun: () => void
@@ -82,14 +107,7 @@ export interface Store {
 
 export const useStore = create<Store>((set) => ({
   inputs: defaultInputs(),
-  ui: {
-    displayMode: 'nominal',
-    aesthetic: 'warm',
-    theme: 'light',
-    density: 'comfortable',
-    lastCommittedAt: null,
-    firstRun: initialFirstRun(),
-  },
+  ui: initialUiState(),
 
   setInputs: (inputs) => set({ inputs }),
 
@@ -126,6 +144,11 @@ export const useStore = create<Store>((set) => ({
   setDensity: (density) => set((s) => ({ ui: { ...s.ui, density } })),
 
   setLastCommittedAt: (lastCommittedAt) => set((s) => ({ ui: { ...s.ui, lastCommittedAt } })),
+
+  setConfidenceTarget: (target) =>
+    set((s) => ({
+      ui: { ...s.ui, confidenceTarget: Math.max(MIN_CONFIDENCE, Math.min(MAX_CONFIDENCE, target)) },
+    })),
 
   startFirstRun: () => set((s) => ({ ui: { ...s.ui, firstRun: { ...initialFirstRun(), active: true } } })),
 

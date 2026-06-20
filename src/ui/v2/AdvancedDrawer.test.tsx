@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { AdvancedDrawer } from './AdvancedDrawer'
-import { useStore, initialFirstRun } from '../../store'
+import { useStore, initialUiState } from '../../store'
 import { defaultInputs } from '../../schema'
 
 beforeEach(() => {
@@ -15,14 +15,7 @@ beforeEach(() => {
       ],
       annualExpenses: 70_000,
     },
-    ui: {
-      displayMode: 'nominal',
-      aesthetic: 'warm',
-      theme: 'light',
-      density: 'comfortable',
-      lastCommittedAt: null,
-      firstRun: initialFirstRun(),
-    },
+    ui: initialUiState(),
   })
 })
 
