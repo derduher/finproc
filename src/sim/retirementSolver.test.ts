@@ -15,7 +15,9 @@ function scenario(overrides: Partial<SimulationInputs> = {}): SimulationInputs {
       maxAge: 90,
       retirementAge: 62,
       annualSalary: 80_000,
-      salaryGrowthRate: 0.0,
+      // Keeps pace with the 2% inflation below. A flat nominal salary against
+      // rising expenses means real income falls until no retirement age works.
+      salaryGrowthRate: 0.03,
       marginalTaxRate: 0.2,
       ltcgRate: 0.15,
     },
@@ -58,7 +60,9 @@ describe('findRetirementAgeForSuccess', () => {
     const result = findRetirementAgeForSuccess(inputs, 0.9, { runCount: RUN_COUNT })!
     if (result.age > inputs.person.currentAge) {
       const earlier = runMonteCarlo(
-        withRetirementAge(inputs, result.age - 1),
+        // Same early-access assumption the solver uses, or this compares two
+        // different plans.
+        withRetirementAge(inputs, result.age - 1, { earlyAccess: true }),
         RUN_COUNT,
         inputs.seed,
       )
@@ -101,5 +105,35 @@ describe('findRetirementAgeForSuccess', () => {
     const result = findRetirementAgeForSuccess(inputs, 0.9, { runCount: RUN_COUNT })
     expect(result).toBeDefined()
     expect(result!.age).toBe(inputs.person.currentAge)
+  })
+
+  it('does not let a locked-up account buy an earlier retirement age', () => {
+    // Everything in a 401k that can't be touched until 70. Without the solver's
+    // early-access assumption the years between retirement and 70 go unfunded
+    // *silently* (a lockout is not depletion), so the plan would look retirable
+    // far too early. With it, the money is reachable but the draws are real.
+    const locked = scenario({
+      annualExpenses: 90_000,
+      accounts: [
+        {
+          id: 'k', name: '401k', type: 'traditional',
+          balance: 400_000,
+          contributionAmount: 500,
+          contributionType: 'flat',
+          contributionFrequency: 'monthly',
+          contributionEndAge: 62,
+          withdrawalStartAge: 70,
+        },
+      ],
+    })
+    const result = findRetirementAgeForSuccess(locked, 0.9, { runCount: RUN_COUNT })
+    if (result) {
+      const atAge = runMonteCarlo(
+        withRetirementAge(locked, result.age, { earlyAccess: true }),
+        RUN_COUNT,
+        locked.seed,
+      )
+      expect(atAge.successRate).toBeGreaterThanOrEqual(0.9)
+    }
   })
 })

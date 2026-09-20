@@ -7,9 +7,17 @@ vi.mock('idb-keyval', () => ({
   del: vi.fn(),
 }))
 
-import { getCacheKey, getCache, setCache } from './cache'
+import {
+  getCacheKey,
+  getCache,
+  setCache,
+  getFundingCacheKey,
+  getFundingCache,
+  setFundingCache,
+} from './cache'
 import { defaultInputs } from '../schema'
 import type { MonteCarloResult } from '../sim/montecarlo'
+import type { FundingCurveResult } from '../sim/fundingCurve'
 import * as idb from 'idb-keyval'
 
 const MOCK_RESULT: MonteCarloResult = {
@@ -76,5 +84,45 @@ describe('cache — round-trip', () => {
     const inp = defaultInputs()
     const result = await getCache(inp)
     expect(result).toEqual(MOCK_RESULT)
+  })
+})
+
+const MOCK_CURVE: FundingCurveResult = {
+  points: [{ age: 60, requiredSorted: [1, 2, 3], projected: { p10: 1, p50: 2, p90: 3 } }],
+  runCount: 3,
+  retirementAge: 65,
+}
+
+describe('cache — funding curve', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('keys on the inputs and the run count', () => {
+    const inputs = defaultInputs()
+    expect(getFundingCacheKey(inputs, 200)).toBe(getFundingCacheKey(inputs, 200))
+    expect(getFundingCacheKey(inputs, 200)).not.toBe(getFundingCacheKey(inputs, 100))
+    expect(getFundingCacheKey(inputs, 200)).not.toBe(
+      getFundingCacheKey({ ...inputs, annualExpenses: 12_345 }, 200),
+    )
+  })
+
+  it('never collides with the Monte Carlo namespace', () => {
+    const inputs = defaultInputs()
+    expect(getFundingCacheKey(inputs, 200)).not.toBe(getCacheKey(inputs))
+  })
+
+  it('round-trips a curve through IDB', async () => {
+    const inputs = defaultInputs()
+    await setFundingCache(inputs, 200, MOCK_CURVE)
+    expect(idb.set).toHaveBeenCalledWith(getFundingCacheKey(inputs, 200), MOCK_CURVE)
+
+    vi.mocked(idb.get).mockResolvedValueOnce(MOCK_CURVE)
+    await expect(getFundingCache(inputs, 200)).resolves.toEqual(MOCK_CURVE)
+  })
+
+  it('resolves undefined on a miss', async () => {
+    vi.mocked(idb.get).mockResolvedValueOnce(undefined)
+    await expect(getFundingCache(defaultInputs(), 200)).resolves.toBeUndefined()
   })
 })

@@ -6,6 +6,7 @@
 import { get, set } from 'idb-keyval'
 import type { SimulationInputs } from '../schema'
 import type { MonteCarloResult } from '../sim/montecarlo'
+import type { FundingCurveResult } from '../sim/fundingCurve'
 
 /**
  * djb2 hash — fast non-cryptographic string hash.
@@ -60,4 +61,37 @@ export async function getCache(inputs: SimulationInputs): Promise<MonteCarloResu
 /** Store a simulation result. */
 export async function setCache(inputs: SimulationInputs, result: MonteCarloResult): Promise<void> {
   await set(getCacheKey(inputs), result)
+}
+
+/**
+ * Funding-curve cache version. Separate namespace from the Monte Carlo cache:
+ * the two have unrelated output shapes and change for different reasons, so a
+ * shared counter would throw away good entries on every bump.
+ */
+const FUNDING_CACHE_VERSION = 1
+
+/**
+ * Cache key for a funding curve. `runCount` is part of the key because it sets
+ * the curve's resolution — a 24-run curve and a 200-run curve of the same plan
+ * are different answers, not the same one at different speeds.
+ */
+export function getFundingCacheKey(inputs: SimulationInputs, runCount: number): string {
+  return `fc:v${FUNDING_CACHE_VERSION}:${runCount}:${djb2(stableJson(inputs))}`
+}
+
+/** Retrieve a cached funding curve, or undefined on miss. */
+export async function getFundingCache(
+  inputs: SimulationInputs,
+  runCount: number,
+): Promise<FundingCurveResult | undefined> {
+  return get<FundingCurveResult>(getFundingCacheKey(inputs, runCount))
+}
+
+/** Store a solved funding curve. */
+export async function setFundingCache(
+  inputs: SimulationInputs,
+  runCount: number,
+  result: FundingCurveResult,
+): Promise<void> {
+  await set(getFundingCacheKey(inputs, runCount), result)
 }
