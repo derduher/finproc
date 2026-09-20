@@ -1,8 +1,10 @@
 name: Deploy
 
 on:
-  push:
-    branches: [main]
+  # Called by the CI workflow once its checks pass, so a red build cannot
+  # deploy. Not triggered by push directly — that would race CI rather than
+  # wait for it.
+  workflow_call:
   workflow_dispatch:
 
 # Only one deploy at a time; let an in-progress deploy finish.
