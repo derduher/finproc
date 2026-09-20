@@ -18,14 +18,22 @@ import type { SustainableSpendResult } from '../sim/spendSolver'
 import type { RetirementSolveResult } from '../sim/retirementSolver'
 import type { SaveMoreResult } from '../sim/saveMoreSolver'
 import type { Insight } from '../sim/insights'
+import type { FundingCurveResult, FundingProgress } from '../sim/fundingCurve'
 import type { SimulationInputs, SensitivityResult } from '../schema'
 
 export type { ProgressCallback, ProgressEvent } from '../sim/montecarlo'
+export type { FundingProgress } from '../sim/fundingCurve'
 
 type SimulatorModule = typeof import('./simulator')
 type SimulatorApi = Pick<
   SimulatorModule,
-  'simulate' | 'sustainableSpend' | 'earliestRetirementAge' | 'requiredExtraSavings' | 'sensitivity' | 'insights'
+  | 'simulate'
+  | 'sustainableSpend'
+  | 'earliestRetirementAge'
+  | 'requiredExtraSavings'
+  | 'sensitivity'
+  | 'insights'
+  | 'fundingCurve'
 >
 
 let remote: Remote<SimulatorApi> | undefined
@@ -153,5 +161,16 @@ export async function insights(
   return run(
     (r) => r.insights(inputs, runCount),
     (m) => m.insights(inputs, runCount),
+  )
+}
+
+export async function fundingCurve(
+  inputs: SimulationInputs,
+  opts?: { runCount?: number; maxSolveAge?: number },
+  onProgress?: (event: FundingProgress) => void,
+): Promise<FundingCurveResult> {
+  return run(
+    (r) => r.fundingCurve(inputs, opts, onProgress ? proxy(onProgress) : undefined),
+    (m) => m.fundingCurve(inputs, opts, onProgress),
   )
 }

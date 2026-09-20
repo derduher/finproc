@@ -29,9 +29,11 @@ import { PathStories } from './PathStories'
 import { StressTest } from './StressTest'
 import { WhatMoves } from './WhatMoves'
 import { ResultExplorer } from './ResultExplorer'
+import { FundingRead } from './FundingRead'
 import { useHistoricalStress } from '../../hooks/useHistoricalStress'
 import { useSensitivity } from '../../hooks/useSensitivity'
 import { useInsights } from '../../hooks/useInsights'
+import { useFundingCurve } from '../../hooks/useFundingCurve'
 import type { MonteCarloResult } from '../../sim/montecarlo'
 
 /** Sample path whose ending balance is closest to the median — a representative run. */
@@ -73,6 +75,9 @@ export function MainScreen() {
   const stress = useHistoricalStress(inputs, displayMode)
   const { data: sensitivityRows, loading: sensitivityLoading } = useSensitivity(inputs)
   const { data: insightCards, loading: insightsLoading } = useInsights(inputs)
+  // Heaviest solve on the screen — cached, debounced, and allowed to lag behind
+  // the rest of the page rather than blocking it.
+  const funding = useFundingCurve(inputs)
 
   return (
     <div className="hf" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
@@ -168,6 +173,18 @@ export function MainScreen() {
                     )}
                     <SpendFloorNote guardrails={guardrails} spendFloorP10={rawResult.spendFloorP10} />
                   </div>
+
+                  {/* what each retirement age costs, against what you'll have */}
+                  <FundingRead
+                    curve={funding.curve}
+                    confidence={confidence}
+                    earliestAge={earliestAge ?? undefined}
+                    loading={funding.loading}
+                    stale={funding.stale}
+                    progress={funding.progress}
+                    planRetirementAge={inputs.person.retirementAge}
+                    width={CHART_W}
+                  />
 
                   {/* two-sided outcome */}
                   <div className="v2-outcome-grid">

@@ -14,14 +14,17 @@ import { findRetirementAgeForSuccess } from '../sim/retirementSolver'
 import { findRequiredExtraSavings } from '../sim/saveMoreSolver'
 import { runSensitivity } from '../sim/sensitivity'
 import { computeInsights } from '../sim/insights'
+import { runFundingCurve } from '../sim/fundingCurve'
 import type { MonteCarloResult, ProgressCallback } from '../sim/montecarlo'
 import type { SustainableSpendResult } from '../sim/spendSolver'
 import type { RetirementSolveResult } from '../sim/retirementSolver'
 import type { SaveMoreResult } from '../sim/saveMoreSolver'
 import type { Insight } from '../sim/insights'
+import type { FundingCurveResult, FundingProgress } from '../sim/fundingCurve'
 import type { SimulationInputs, SensitivityResult } from '../schema'
 
 export type { ProgressCallback, ProgressEvent } from '../sim/montecarlo'
+export type { FundingProgress } from '../sim/fundingCurve'
 
 /**
  * Run Monte Carlo simulation.
@@ -107,12 +110,35 @@ export async function insights(
   return computeInsights(inputs, baseline, { runCount })
 }
 
+/**
+ * Solve the funding curve — required balance per age against the projected
+ * accumulation. The heaviest call here (one accumulation pass plus a per-run
+ * bisection at every age), so it always wants the worker. `onProgress` must be
+ * `Comlink.proxy`-wrapped by the caller, same as `simulate`.
+ * Exported directly for testability without Comlink.
+ */
+export async function fundingCurve(
+  inputs: SimulationInputs,
+  opts?: { runCount?: number; maxSolveAge?: number },
+  onProgress?: (event: FundingProgress) => void,
+): Promise<FundingCurveResult> {
+  return runFundingCurve(inputs, { ...opts, onProgress })
+}
+
 // Comlink exposure — only runs in Worker context (not during tests).
 // The `typeof WorkerGlobalScope !== 'undefined'` guard prevents errors in jsdom.
 // Comlink exposure — only in Worker context
 try {
   if (typeof self !== 'undefined' && 'WorkerGlobalScope' in globalThis) {
-    expose({ simulate, sustainableSpend, earliestRetirementAge, requiredExtraSavings, sensitivity, insights })
+    expose({
+      simulate,
+      sustainableSpend,
+      earliestRetirementAge,
+      requiredExtraSavings,
+      sensitivity,
+      insights,
+      fundingCurve,
+    })
   }
 } catch {
   // Not in a worker context — this is fine for tests

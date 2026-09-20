@@ -20,8 +20,10 @@ export interface RetirementSolveResult {
  * Returns undefined if even retiring at maxAge can't reach the target.
  *
  * Each candidate is evaluated by re-running the simulation with the retirement
- * age cascaded onto accounts (see `withRetirementAge`). The seed is fixed so the
- * comparison across ages is apples-to-apples.
+ * age cascaded onto accounts (see `withRetirementAge`), under `earlyAccess` so a
+ * 401k that's locked until 59½ can't let an early retirement "succeed" on years
+ * it never actually funded. The seed is fixed so the comparison across ages is
+ * apples-to-apples.
  */
 export function findRetirementAgeForSuccess(
   inputs: SimulationInputs,
@@ -32,7 +34,8 @@ export function findRetirementAgeForSuccess(
   const { currentAge, maxAge } = inputs.person
 
   const successAt = (age: number): number =>
-    runMonteCarlo(withRetirementAge(inputs, age), runCount, inputs.seed).successRate
+    runMonteCarlo(withRetirementAge(inputs, age, { earlyAccess: true }), runCount, inputs.seed)
+      .successRate
 
   // If the best case (retire as late as possible) still falls short, give up.
   if (successAt(maxAge) < targetSuccessRate) return undefined
