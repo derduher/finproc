@@ -33,3 +33,11 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  deploy:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      id-token: write # required for OIDC role assumption
+      contents: read
