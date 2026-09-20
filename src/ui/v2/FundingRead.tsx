@@ -7,7 +7,7 @@
  * nominal toggle here.
  */
 import { FundingChart } from '../charts/FundingChart'
-import { fundingCaption } from './fundingNarrative'
+import { fundingCaption, fundingHorizonNote } from './fundingNarrative'
 import type { FundingCurveResult, FundingProgress } from '../../sim/fundingCurve'
 
 export interface FundingReadProps {
@@ -20,6 +20,9 @@ export interface FundingReadProps {
   progress?: FundingProgress
   /** The plan's retirement age, for the no-crossing gap read. */
   planRetirementAge: number
+  /** The plan's end age, for the horizon note. */
+  planMaxAge: number
+  longevity: 'fixed' | 'stochastic'
   width: number
 }
 
@@ -31,9 +34,19 @@ export function FundingRead({
   stale,
   progress,
   planRetirementAge,
+  planMaxAge,
+  longevity,
   width,
 }: FundingReadProps) {
   const pct = Math.round(confidence * 100)
+  const horizon = curve
+    ? fundingHorizonNote({
+        firstAge: curve.points[0]?.age ?? 0,
+        lastSolvedAge: curve.points[curve.points.length - 1]?.age ?? 0,
+        planMaxAge,
+        longevity,
+      })
+    : ''
   return (
     <div style={{ borderTop: '1px solid var(--line)', paddingTop: 22, marginBottom: 18 }}>
       <div className="v2-chart-head">
@@ -42,6 +55,7 @@ export function FundingRead({
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>
             The falling line is what it takes to retire at each age and fund your spending at {pct}%
             confidence. The rising line is what you're projected to have if you keep working until then.
+            {horizon && <> {horizon}</>}
           </div>
         </div>
         <div

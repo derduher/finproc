@@ -16,7 +16,13 @@
  */
 import { useRef, useState, useId } from 'react'
 import { formatMoneyAbbreviated } from '../../math'
-import { requiredAt, crossingAge, crossingBand, FUNDING_GHOST_CONFIDENCES } from '../../sim/fundingCurve'
+import {
+  requiredAt,
+  crossingAge,
+  crossingBand,
+  fullyFundedAge,
+  FUNDING_GHOST_CONFIDENCES,
+} from '../../sim/fundingCurve'
 import { ageAtFraction, fractionForClientX } from './pathsZoom'
 import { tooltipBoxPosition } from './PathsChart'
 import type { FundingCurvePoint, FundingCurveResult } from '../../sim/fundingCurve'
@@ -146,13 +152,22 @@ export function FundingChart({
       : undefined
 
   const yTicks = [0, cap * 0.5, cap]
+  // The plan's own retirement age carries a label: an unexplained number on the
+  // axis reads as a scale tick, not a reference line.
   const ageTicks = [
     ...new Set(
       [minAge, result.retirementAge, earliestAge, maxAgeShown].filter(
         (a): a is number => a != null && a >= minAge && a <= maxAgeShown,
       ),
     ),
-  ].sort((a, b) => a - b)
+  ]
+    .sort((a, b) => a - b)
+    .map((age) => ({ age, label: age === result.retirementAge ? `retire · ${age}` : String(age) }))
+
+  // The rare case where guaranteed income covers the whole spend, so no
+  // portfolio is required from here on.
+  const fundedAge = fullyFundedAge(result, confidence)
+  const showFunded = fundedAge !== undefined && fundedAge >= minAge && fundedAge <= maxAgeShown
 
   const onScrub = (e: React.PointerEvent<SVGRectElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -261,6 +276,18 @@ export function FundingChart({
           />
         )}
 
+        {showFunded && (
+          <line
+            x1={x(fundedAge)}
+            y1={pad.t}
+            x2={x(fundedAge)}
+            y2={pad.t + ch}
+            stroke="var(--good)"
+            strokeWidth="1.5"
+            strokeDasharray="2 4"
+          />
+        )}
+
         {hovered && (
           <line
             x1={x(hovered.age)}
@@ -282,6 +309,18 @@ export function FundingChart({
           fill="var(--ink-2)"
         >
           earliest age · {earliestAge}
+        </text>
+      )}
+
+      {showFunded && (
+        <text
+          x={Math.min(x(fundedAge) + 6, pad.l + cw - 150)}
+          y={pad.t + ch - 26}
+          fontFamily="var(--font-body)"
+          fontSize="11"
+          fill="var(--good)"
+        >
+          no portfolio needed · {fundedAge}
         </text>
       )}
 
@@ -365,17 +404,17 @@ export function FundingChart({
           {i === yTicks.length - 1 ? '+' : ''}
         </text>
       ))}
-      {ageTicks.map((a) => (
+      {ageTicks.map(({ age, label }) => (
         <text
-          key={`xt${a}`}
-          x={x(a)}
+          key={`xt${age}`}
+          x={Math.max(pad.l + 16, Math.min(x(age), pad.l + cw - 16))}
           y={pad.t + ch + 18}
           fontFamily="var(--font-mono)"
           fontSize="11"
           fill="var(--ink-3)"
           textAnchor="middle"
         >
-          {a}
+          {label}
         </text>
       ))}
 

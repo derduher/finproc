@@ -183,6 +183,8 @@ export function MainScreen() {
                     stale={funding.stale}
                     progress={funding.progress}
                     planRetirementAge={inputs.person.retirementAge}
+                    planMaxAge={inputs.person.maxAge}
+                    longevity={inputs.longevity ?? 'fixed'}
                     width={CHART_W}
                   />
 

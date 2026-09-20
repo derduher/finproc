@@ -137,6 +137,21 @@ export function crossingBand(
 }
 
 /**
+ * First age at which no portfolio is required at all — guaranteed income
+ * (Social Security, net of tax) covers the whole spend from there on, so the
+ * solver's per-run minimum is literally zero. Undefined when a portfolio is
+ * always needed, which is the usual case: it takes guaranteed income meeting or
+ * exceeding spending. The requirement is non-increasing in age, so the first
+ * zero is the start of a zero tail. Pure.
+ */
+export function fullyFundedAge(
+  result: FundingCurveResult,
+  confidence: number,
+): number | undefined {
+  return result.points.find((p) => requiredAt(p, confidence) === 0)?.age
+}
+
+/**
  * What you'd have against what you'd need at one age. `gap` is signed: negative
  * is a shortfall, positive is slack. Undefined outside the solved range. Pure.
  */

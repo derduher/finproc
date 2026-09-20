@@ -4,6 +4,7 @@ import {
   requiredAt,
   crossingAge,
   crossingBand,
+  fullyFundedAge,
   gapAt,
   FUNDING_GHOST_CONFIDENCES,
   MAX_SOLVE_AGE,
@@ -297,6 +298,52 @@ describe('crossingBand', () => {
     const band = crossingBand(result, 0.9)
     expect(band.to).toBeUndefined()
     expect(band.from).toBe(56)
+  })
+})
+
+describe('fullyFundedAge', () => {
+  const at = (ages: number[], needs: number[]) => ({
+    points: ages.map((age, i) => ({
+      age,
+      requiredSorted: Array.from({ length: 11 }, () => needs[i]),
+      projected: { p10: 0, p50: 0, p90: 0 },
+    })),
+    runCount: 11,
+    retirementAge: 65,
+  })
+
+  it('finds the first age that needs no portfolio at all', () => {
+    expect(fullyFundedAge(at([70, 71, 72, 73], [500, 400, 0, 0]), 0.9)).toBe(72)
+  })
+
+  it('is undefined while any portfolio is still required', () => {
+    expect(fullyFundedAge(at([70, 71, 72], [500, 400, 300]), 0.9)).toBeUndefined()
+  })
+
+  it('is undefined for an empty curve', () => {
+    expect(fullyFundedAge({ points: [], runCount: 0, retirementAge: 65 }, 0.9)).toBeUndefined()
+  })
+
+  it('reads the active confidence, not a fixed one', () => {
+    const mixed = {
+      points: [
+        { age: 70, requiredSorted: [0, 0, 0, 0, 0, 0, 100, 200, 300, 400, 500], projected: { p10: 0, p50: 0, p90: 0 } },
+      ],
+      runCount: 11,
+      retirementAge: 65,
+    }
+    expect(fullyFundedAge(mixed, 0.5)).toBe(70)
+    expect(fullyFundedAge(mixed, 0.9)).toBeUndefined()
+  })
+
+  it('finds the age on a real plan whose guaranteed income covers the spend', () => {
+    const covered = scenario({
+      person: { ...scenario().person, currentAge: 62, maxAge: 74 },
+      annualExpenses: 8_000,
+      socialSecurity: { claimAge: 62, annualAmountPresentDollars: 90_000 },
+    })
+    const result = runFundingCurve(covered, { runCount: 6, maxSolveAge: 66 })
+    expect(fullyFundedAge(result, 0.9)).toBe(62)
   })
 })
 

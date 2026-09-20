@@ -151,6 +151,32 @@ describe('FundingChart', () => {
     expect(texts(container).some((t) => t?.startsWith('earliest age'))).toBe(false)
   })
 
+  it('labels the plan retirement tick so it is not a bare number', () => {
+    const { container } = render(<FundingChart result={curve()} confidence={0.9} />)
+    expect(texts(container)).toContain('retire · 65')
+    expect(texts(container)).not.toContain('65')
+  })
+
+  it('marks the age where no portfolio is needed at all', () => {
+    const points: FundingCurvePoint[] = []
+    for (let age = 55; age <= 70; age++) {
+      points.push({
+        age,
+        requiredSorted: Array.from({ length: 11 }, () => (age < 62 ? 400_000 : 0)),
+        projected: { p10: 900_000, p50: 1_000_000, p90: 1_100_000 },
+      })
+    }
+    const { container } = render(
+      <FundingChart result={{ points, runCount: 11, retirementAge: 65 }} confidence={0.9} />,
+    )
+    expect(texts(container)).toContain('no portfolio needed · 62')
+  })
+
+  it('omits that marker when a portfolio is always required', () => {
+    const { container } = render(<FundingChart result={curve()} confidence={0.9} />)
+    expect(texts(container).some((t) => t?.startsWith('no portfolio needed'))).toBe(false)
+  })
+
   it('shades the shortfall only when the plan never catches up', () => {
     const healthy = render(<FundingChart result={curve()} confidence={0.9} />)
     expect(polys(healthy.container).some((p) => p.getAttribute('fill') === 'var(--bad)')).toBe(false)
