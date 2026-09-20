@@ -15,20 +15,35 @@ import type { SimulationInputs } from '../schema'
 export const MEDIAN_DISPLAY_MIN_SOLVENT = 0.5
 
 /**
+ * Minimum share of the *original* cohort that must still REACH a year for its
+ * median/band to be drawn. Under stochastic longevity the cohort thins out as
+ * runs hit their age at death, so the oldest ages are summarized over a handful
+ * of survivors — a noisy median that spikes to absurd values and crashes between
+ * adjacent years. Below this floor the per-year median isn't a stable estimate.
+ * See {@link reliableMedianYears}.
+ */
+export const MEDIAN_DISPLAY_MIN_COHORT = 0.1
+
+/**
  * How many leading years of the per-year balance accumulator are statistically
- * reliable to plot as a median/band: the contiguous leading block where at least
- * `minSolvent` of the runs that *reached* that year are still solvent
- * (`balance > 0`). Depletion is permanent (depleted runs stay $0), so solvency is
- * monotone non-increasing across years — the unreliable region is always a
- * trailing block. Always returns ≥1 so the chart never goes empty. Pure.
+ * reliable to plot as a median/band: the contiguous leading block where, of the
+ * runs that *reached* that year, at least `minSolvent` are still solvent
+ * (`balance > 0`) AND at least `minCohort` of the *original* cohort reached it at
+ * all. The first guards the fixed-longevity "median snaps to $0 once >half
+ * deplete" cliff; the second guards the stochastic-longevity "median over a few
+ * old survivors goes wild" tail. Scanning to the first failing year yields the
+ * leading reliable block. Always returns ≥1 so the chart never goes empty. Pure.
  */
 export function reliableMedianYears(
   balancesByYear: number[][],
   minSolvent: number = MEDIAN_DISPLAY_MIN_SOLVENT,
+  minCohort: number = MEDIAN_DISPLAY_MIN_COHORT,
 ): number {
+  const total = balancesByYear[0]?.length ?? 0
   for (let y = 0; y < balancesByYear.length; y++) {
     const reached = balancesByYear[y].length
     if (reached === 0) return Math.max(1, y)
+    if (total > 0 && reached / total < minCohort) return Math.max(1, y)
     const solvent = balancesByYear[y].reduce((n, b) => (b > 0 ? n + 1 : n), 0)
     if (solvent / reached < minSolvent) return Math.max(1, y)
   }
